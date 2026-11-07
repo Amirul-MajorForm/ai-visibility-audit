@@ -1,0 +1,27 @@
+{
+  "name": "ai-visibility-audit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Audits how readable a website is for AI assistants (ChatGPT, Claude, Gemini, Perplexity) and produces a branded client report.",
+  "type": "module",
+  "scripts": {
+    "audit": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/dm-sans": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
+    "cheerio": "^1.1.2",
+    "playwright": "^1.63.0",
+    "robots-parser": "^3.0.1",
+    "tsx": "^4.20.6",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.12",
+    "typescript": "^5.9.3"
+  }
+}
