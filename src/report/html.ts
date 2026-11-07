@@ -148,15 +148,16 @@ export async function renderReport(r: AuditResult): Promise<string> {
     <thead><tr><th>Page</th><th class="num">Words in HTML</th><th class="num">After JavaScript</th><th class="num">AI can read</th><th>Notes</th></tr></thead>
     <tbody>${r.pages
       .map((p) => {
-        const ratio = Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100));
+        const ok = p.renderedWords >= 0;
+        const ratio = ok ? Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100)) : 0;
         const notes = [
           p.widgets.length ? `Uses ${p.widgets.join(', ')}` : '',
           p.hiddenFacts.length ? `Hidden from AI: ${p.hiddenFacts.join(', ')}` : '',
         ].filter(Boolean);
         return `<tr>
           <td><strong>${esc(p.label)}</strong><div class="muted small url">${esc(pathOf(p.url))}</div></td>
-          <td class="num">${p.rawWords}</td><td class="num">${p.renderedWords}</td>
-          <td class="num"><span class="ratio" style="--c:${gradeColor(ratio)}">${ratio}%</span></td>
+          <td class="num">${p.rawWords}</td><td class="num">${ok ? p.renderedWords : '<span class="muted">n/a</span>'}</td>
+          <td class="num">${ok ? `<span class="ratio" style="--c:${gradeColor(ratio)}">${ratio}%</span>` : '<span class="muted">n/a</span>'}</td>
           <td class="small">${notes.length ? esc(notes.join('. ')) : '<span class="muted">None</span>'}</td>
         </tr>`;
       })

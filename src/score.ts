@@ -99,7 +99,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
       label: p.label,
       status: p.fetch.status,
       rawWords: p.raw.words,
-      renderedWords: p.rendered?.words ?? p.raw.words,
+      renderedWords: p.rendered?.words || -1, // -1 = could not render
       title: p.raw.title,
       schemaTypes: p.raw.schemaTypes,
       widgets: p.widgets,
@@ -108,7 +108,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
     priorities,
     stats: [
       { label: 'AI search crawlers confirmed allowed', value: `${okBots.length}/${answerBots.length}`, note: ctx.robotsState === 'broken' ? 'robots.txt is unreadable' : 'robots.txt and live test' },
-      { label: 'Content readable without JavaScript', value: `${Math.round(vis * 100)}%`, note: `across ${rendered.length} pages` },
+      { label: 'Content readable without JavaScript', value: rendered.length ? `${Math.round(vis * 100)}%` : 'n/a', note: rendered.length ? `across ${rendered.length} pages` : 'browser check did not run' },
       { label: 'Business details in structured data', value: `${bizFields}/${BUSINESS_FIELDS.length}`, note: biz ? `as ${typesOf(biz).join(', ')}` : 'no business markup' },
       { label: 'Pages reviewed', value: String(ctx.pages.length), note: 'homepage and key pages' },
     ],

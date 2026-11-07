@@ -138,6 +138,7 @@ export async function crawl(inputUrl: string, log: (s: string) => void): Promise
   await withBrowser(async (render) => {
     const homeRaw = parsePage(home.body, home.finalUrl);
     const homeRendered = await render(home.finalUrl);
+    if (homeRendered.error) log(`Warning: browser could not render the homepage (${homeRendered.error})`);
     const homeRenderedInfo = homeRendered.html ? parsePage(homeRendered.html, home.finalUrl) : undefined;
     pages.push({
       url: home.finalUrl,
@@ -157,6 +158,7 @@ export async function crawl(inputUrl: string, log: (s: string) => void): Promise
       if (pages.some((p) => norm(p.url) === norm(f.finalUrl))) continue;
       const raw = parsePage(f.body, f.finalUrl);
       const r = await render(f.finalUrl);
+      if (r.error) log(`Warning: browser could not render ${f.finalUrl} (${r.error})`);
       pages.push({
         url: f.finalUrl,
         label: kp.label,

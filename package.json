@@ -5,6 +5,7 @@
   "description": "Audits how readable a website is for AI assistants (ChatGPT, Claude, Gemini, Perplexity) and produces a branded client report.",
   "type": "module",
   "scripts": {
+    "start": "tsx src/web/server.ts",
     "audit": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit"
   },

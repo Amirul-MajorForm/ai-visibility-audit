@@ -4,14 +4,38 @@ Internal MajorForm tool that checks how easily AI assistants (ChatGPT, Claude, G
 
 This is **Layer 1: technical readiness**. Layer 2 (asking the AI models real customer questions and measuring share of voice) is planned.
 
-## Usage
+## Web app
+
+Type a website in, watch the audit run, then view the report in the browser and download the PDF. Past audits are listed on the home page.
 
 ```bash
 npm install
-npm run audit -- https://example.sg
+APP_PASSWORD=choose-one npm start     # http://localhost:3000
 ```
 
-Options:
+### Deploy on Railway
+
+1. In Railway: **New Project > Deploy from GitHub repo** and pick this repository (and the branch you want to deploy).
+   Railway picks up `railway.json` and builds the `Dockerfile` (Playwright's image, which includes Chromium).
+2. **Variables**: add `APP_PASSWORD`. The browser will ask for it (any username works).
+3. **Volume**: add a volume mounted at `/data` so audits survive redeploys. Without it, past reports disappear on every deploy.
+4. **Networking**: click **Generate Domain**.
+5. Recommended: at least 1 GB of memory, since each audit runs a headless browser.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `APP_PASSWORD` | none | Password for the whole app. Strongly recommended: without it anyone with the URL can run audits. |
+| `DATA_DIR` | `/data` in Docker, `./data` locally | Where audits and reports are stored |
+| `MAX_CONCURRENT_AUDITS` | `1` | Audits run one at a time; extra requests queue |
+| `DNS_CHECK` | on | Set to `off` only behind an outbound proxy where local DNS does not resolve |
+
+The app refuses private and internal network addresses, so it cannot be used to probe Railway's own network.
+
+## Command line
+
+```bash
+npm run audit -- https://example.sg
+```
 
 | Flag | Purpose |
 |---|---|
@@ -20,8 +44,7 @@ Options:
 | `--no-pdf` | Skip the PDF |
 
 Output goes to `reports/<domain>-<date>/`: `report.json`, `report.html`, `report.pdf`.
-
-Requires Node 20+ and Playwright's Chromium (`npx playwright install chromium` on a fresh machine).
+Running outside Docker needs Node 20+ and Playwright's Chromium (`npx playwright install chromium`).
 
 ## What it checks
 
@@ -43,7 +66,9 @@ Checks are tuned for Singapore fitness studios (SG phone and postal code formats
 
 ```
 src/
-  cli.ts            entry point
+  web/              web app: server, job queue, pages, URL safety checks
+  audit.ts          runs one audit and writes the report files (used by web app and CLI)
+  cli.ts            command-line entry point
   crawl.ts          fetches pages, robots.txt, sitemap; picks key pages; live crawler tests
   http.ts           fetch with manual redirects (detects loops) and proxy support
   render.ts         Playwright rendering

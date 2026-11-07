@@ -16,6 +16,14 @@ export function renderingChecks(ctx: Ctx): Check[] {
   const checks: Check[] = [];
   const rendered = ctx.pages.filter((p) => p.rendered && p.rendered.words > 0);
 
+  if (!rendered.length) {
+    checks.push(mk({ id: 'js-content', category: 'rendering', title: 'Content visible without JavaScript', weight: 4, score: 1, status: 'info',
+      finding: 'We could not load the pages in a full browser this time, so we could not compare what AI sees with what visitors see. Re-run the audit to complete this check.' }));
+    checks.push(mk({ id: 'hidden-facts', category: 'rendering', title: 'Key business facts readable by AI', weight: 3, score: 1, status: 'info',
+      finding: 'Skipped because the browser comparison could not run.' }));
+    return checks;
+  }
+  const failed = ctx.pages.filter((p) => !p.rendered || !p.rendered.words);
   const ratios = rendered.map((p) => ({ p, r: Math.min(1, p.raw.words / Math.max(1, p.rendered!.words)) }));
   const avg = ratios.length ? ratios.reduce((s, x) => s + x.r, 0) / ratios.length : 1;
   const worst = ratios.filter((x) => x.r < 0.7);
@@ -26,7 +34,10 @@ export function renderingChecks(ctx: Ctx): Check[] {
     why: worst.length ? 'Most AI crawlers read the raw HTML and do not run JavaScript. Anything that only appears after scripts run is invisible to them.' : undefined,
     fix: worst.length ? 'Make sure key text is in the page HTML itself (server-side rendering, or turning off "load on scroll" effects for text sections).' : undefined,
     effort: worst.length ? 'Developer needed' : undefined,
-    evidence: ratios.map((x) => `${path(x.p.url)}: ${x.p.raw.words} words in HTML vs ${x.p.rendered!.words} after JavaScript`) }));
+    evidence: [
+      ...ratios.map((x) => `${path(x.p.url)}: ${x.p.raw.words} words in HTML vs ${x.p.rendered!.words} after JavaScript`),
+      ...failed.map((p) => `${path(p.url)}: could not be loaded in a browser, not compared`),
+    ] }));
 
   const hidden = ctx.pages.flatMap((p) => hiddenFacts(p).map((k) => ({ p, k })));
   const hiddenKinds = [...new Set(hidden.map((h) => h.k))];

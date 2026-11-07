@@ -43,6 +43,7 @@ export interface PageResult {
   label: string;
   status: number;
   rawWords: number;
+  /** -1 when the page could not be rendered in a browser */
   renderedWords: number;
   title: string;
   schemaTypes: string[];
