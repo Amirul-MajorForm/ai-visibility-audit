@@ -6,7 +6,7 @@ This is **Layer 1: technical readiness**. Layer 2 (asking the AI models real cus
 
 ## Web app
 
-Type a website in, watch the audit run, then view the report in the browser and download the PDF. Past audits are listed on the home page.
+Type a website in, watch the audit run, then explore the results (priorities, every check with filters, AI crawler access, pages reviewed) and download the branded client report as PDF. Past audits are listed on the home page.
 
 ```bash
 npm install
@@ -52,15 +52,25 @@ The score (0 to 100) is a weighted average of five categories:
 
 | Category | Weight | Checks |
 |---|---|---|
-| AI Crawler Access | 30 | robots.txt health; robots.txt rules for 13 AI/search crawlers (search, live browsing, training); live request as each crawler to catch CDN/firewall blocks |
-| Content Visibility | 20 | Raw HTML vs fully rendered word count; key facts (prices, hours, phone, address, email) that only appear after JavaScript; booking/timetable widgets (Mindbody, Glofox, Vibefam, Momence, etc.) |
+| AI Crawler Access | 30 | robots.txt health; robots.txt rules for 13 AI/search crawlers (search, live browsing, training); live request as each crawler to catch CDN/firewall blocks; challenge or loading pages served instead of content |
+| Content Visibility | 20 | Raw HTML vs fully rendered word count; key facts (prices, hours, phone, address, email) that only appear after JavaScript; booking, reservation and ordering widgets (Mindbody, Fresha, Calendly, Chope, OpenTable, SevenRooms, Oddle, etc.) |
 | Content Clarity | 20 | Titles, meta descriptions, H1s, homepage depth, address, public pricing, hours, contact, FAQ content, essential pages, alt text, language |
-| Structured Data | 15 | JSON-LD present and valid; business typed as ExerciseGym/LocalBusiness; 10 business fields; offers/services; FAQPage |
+| Structured Data | 15 | JSON-LD present and valid; specific business type for the category; key business fields (physical or online set); offers in the right format; FAQPage |
 | Discoverability | 15 | Sitemap (and whether robots.txt references it), noindex, canonical, HTTPS, server response time, Open Graph; llms.txt reported but not scored |
 
-The tool reviews the homepage plus up to 7 key pages it finds in the navigation (pricing, schedule, classes, about, FAQ, contact, trial). Blog posts are skipped.
+The tool reviews the homepage plus up to 7 key pages it finds in the navigation, chosen to suit the business type. Blog posts are skipped.
 
-Checks are tuned for Singapore fitness studios (SG phone and postal code formats, S$ prices, fitness schema types, studio booking platforms) but work for any local business.
+### Business types
+
+Each audit is judged against a business type, detected automatically from the site's structured data and homepage wording, or chosen in the form:
+
+Fitness and wellness · Restaurant, cafe or bar · Beauty, salon or spa · Clinic or healthcare · Tuition, school or training · Hotel or accommodation · Shop or showroom · Online store · Software or tech · Professional or B2B services · Home and trade services · Other
+
+The type decides which key pages are expected (e.g. menu and reservations for a restaurant, shipping and returns for an online store), whether address and opening hours matter, which schema.org types and fields are recommended, how much public pricing matters, and the examples used in the advice. Definitions live in `src/profiles.ts`. The results page shows what was detected, and you can re-run an audit as a different type.
+
+Pages that sometimes return a bot challenge or "loading" screen instead of content are retried, judged on their real content, and reported as their own finding.
+
+Formats are tuned for Singapore (phone numbers, postal codes, S$ prices).
 
 ## Project layout
 
@@ -74,7 +84,8 @@ src/
   render.ts         Playwright rendering
   page.ts           HTML parsing, fact extraction
   bots.ts           AI crawler list (tokens, user agents, purpose)
-  widgets.ts        booking platform detection
+  profiles.ts       business types: detection, expected pages, schema and example copy
+  widgets.ts        booking, reservation and ordering platform detection
   checks/           one file per category; all client-facing copy lives here
   score.ts          category weights, overall score, priorities, summary
   brand.ts          MajorForm colours, fonts, name

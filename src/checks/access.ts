@@ -29,7 +29,7 @@ export function accessChecks(ctx: Ctx): Check[] {
   if (unknown.length === answerBots.length) {
     checks.push(mk({ id: 'answer-bots-robots', category: 'access', title: 'AI search crawler permissions', weight: 4, score: 0.5,
       finding: 'Because robots.txt is broken, we cannot confirm whether ChatGPT, Claude, Gemini and Perplexity are permitted to read your site. This resolves once robots.txt is fixed; make sure the fixed file does not disallow OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User, PerplexityBot, Googlebot or Bingbot.',
-      why: 'These crawlers fetch the pages that AI assistants quote when answering questions like "best gym near me". If they are not permitted, you will not be cited.',
+      why: `These crawlers fetch the pages that AI assistants quote when answering questions like "${ctx.profile.query}". If they are not permitted, you will not be cited.`,
       // No separate fix: this resolves with the robots.txt fix, so it should not be a duplicate priority.
     }));
   } else {
@@ -79,6 +79,18 @@ export function accessChecks(ctx: Ctx): Check[] {
     fix: liveBad.length ? 'In Cloudflare, open Security > Bots and AI Crawl Control and allow the AI search crawlers. Then re-run this audit. Note: some firewalls treat our imitation differently from the real crawler, so confirm in your firewall logs.' : undefined,
     effort: liveBad.length ? 'Quick win' : undefined,
     evidence: liveBad.map((b) => `${b.token}: ${b.liveDetail}`) }));
+
+  // Challenge / loading pages served instead of content
+  const ch = ctx.challenges;
+  if (ch.length) {
+    const stuck = ch.filter((c) => !c.recovered);
+    const pagesHit = [...new Set(ch.map((c) => c.url))];
+    checks.push(mk({ id: 'bot-challenge', category: 'access', title: 'Bot protection blocks some visits', weight: 3, score: stuck.length ? 0.2 : 0.55,
+      finding: `${pagesHit.length} of the ${ctx.pages.length} pages we requested sometimes returned a "${ch[0].title}" waiting or challenge page instead of your content${stuck.length ? ', and it did not clear after retrying' : ' (it cleared when we retried)'}.`,
+      why: 'AI crawlers do not run the checks these pages require and do not retry like a person would. Whenever they hit this page, they see no content at all, so your site looks empty to them.',
+      fix: 'Review your bot protection and loading settings: Cloudflare Bot Fight Mode or "Under Attack" mode, rate limiting, or a WordPress security or page-loader plugin. Allow verified search and AI crawlers through, and make sure the real HTML is served without a waiting screen.',
+      effort: 'Moderate', evidence: ch.map((c) => `${c.url}: "${c.title}"${c.recovered ? ' (cleared on retry)' : ' (did not clear)'}`).slice(0, 6) }));
+  }
 
   return checks;
 }

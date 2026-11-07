@@ -1,10 +1,12 @@
 import type { Check } from '../types.js';
 import type { Ctx } from '../crawl.js';
 import { mk, list, path, pct } from './util.js';
+import { PAGE_KINDS } from '../profiles.js';
 
 export function contentChecks(ctx: Ctx): Check[] {
   const checks: Check[] = [];
   const pages = ctx.pages;
+  const profile = ctx.profile;
   const home = pages[0];
   const n = pages.length;
   const rawText = pages.map((p) => p.raw.text).join(' ');
@@ -17,7 +19,7 @@ export function contentChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'titles', category: 'content', title: 'Page titles', weight: 1.5, score: goodTitles.length / n,
     finding: tBad.length ? `${tBad.length} of ${n} pages have a missing, duplicated, too short or too long title: ${list(tBad.map((p) => `${path(p.url)} ("${p.raw.title || 'none'}")`))}.` : 'Every page we reviewed has a clear, unique title.',
     why: tBad.length ? 'The page title is the strongest one-line summary of a page. AI and search engines use it to decide what the page is about.' : undefined,
-    fix: tBad.length ? 'Give each page a unique 20 to 70 character title that names the service and location, e.g. "Personal Training in Tanjong Pagar | Brand".' : undefined,
+    fix: tBad.length ? `Give each page a unique 20 to 70 character title that says what you offer${profile.physical ? ' and where' : ''}, e.g. "${profile.titleExample}".` : undefined,
     effort: tBad.length ? 'Quick win' : undefined }));
 
   // Meta descriptions
@@ -50,28 +52,34 @@ export function contentChecks(ctx: Ctx): Check[] {
   const sg = /singapore/i.test(rawText);
   const postal = any('postal');
   const locScore = (sg ? 0.4 : 0) + (postal ? 0.6 : 0);
-  checks.push(mk({ id: 'location', category: 'content', title: 'Location clearly stated', weight: 2, score: locScore,
-    finding: postal ? 'Your full address with postal code is in readable text.' : sg ? 'You mention Singapore, but we could not find a full address with postal code in readable text.' : 'We could not find your location stated in readable text.',
-    why: postal ? undefined : 'Most fitness searches are local ("gym near Orchard"). Without a clear address, AI cannot place you on the map.',
-    fix: postal ? undefined : 'Show your full address (street, unit, postal code) in plain text in the footer and on the contact page, plus the neighbourhood and nearest MRT.',
+  checks.push(mk({ id: 'location', category: 'content', title: profile.physical ? 'Location clearly stated' : 'Where you operate', weight: profile.physical ? 2 : 1, score: profile.physical ? locScore : Math.min(1, locScore + 0.3),
+    finding: postal ? 'Your full address with postal code is in readable text.' : sg ? `You mention Singapore, but we could not find a full address with postal code in readable text.` : 'We could not find your location or service area stated in readable text.',
+    why: postal ? undefined : profile.physical
+      ? `Many searches for ${profile.noun.replace(/^an? /, '')}s are local ("${profile.query}"). Without a clear address, AI cannot place you on the map.`
+      : 'AI often filters recommendations by country or city. Stating where you are based and who you serve helps you appear in "in Singapore" answers.',
+    fix: postal ? undefined : profile.physical
+      ? 'Show your full address (street, unit, postal code) in plain text in the footer and on the contact page, plus the neighbourhood and nearest MRT.'
+      : 'State where you are based and which markets you serve (e.g. "Singapore-based, delivering island-wide") in plain text, and add your registered address to the footer.',
     effort: postal ? undefined : 'Quick win' }));
 
   // Pricing
   const priceRaw = any('price');
   const priceAny = any('price', 'rendered');
-  checks.push(mk({ id: 'pricing', category: 'content', title: 'Pricing is public', weight: 2.5, score: priceRaw ? 1 : priceAny ? 0.4 : 0,
+  checks.push(mk({ id: 'pricing', category: 'content', title: 'Pricing is public', weight: 2.5 * profile.pricingImportance, score: priceRaw ? 1 : priceAny ? 0.4 : 0,
     finding: priceRaw ? 'Prices are published in readable text.' : priceAny ? 'Prices appear only after JavaScript runs, so AI cannot read them.' : 'We could not find any prices on the pages we reviewed.',
-    why: priceRaw ? undefined : '"How much does X cost" is one of the most common questions people ask AI about gyms. Without a price, AI says "contact the studio" or recommends a competitor whose prices it can see.',
-    fix: priceRaw ? undefined : 'Publish at least starting prices ("Classes from S$35, memberships from S$199/month, first trial S$25") on a pricing page.',
+    why: priceRaw ? undefined : '"How much does it cost" is one of the most common questions people ask AI. Without a price, AI says "contact them for a quote" or recommends a competitor whose prices it can see.',
+    fix: priceRaw ? undefined : `Publish at least starting prices or typical ranges, e.g. "${profile.pricingExample}".${profile.pricingImportance < 0.7 ? ' If prices vary case by case, explain how they are worked out.' : ''}`,
     effort: priceRaw ? undefined : 'Quick win' }));
 
   // Hours
   const hours = any('hours');
   const days = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekdays|weekends)\b/i.test(rawText);
-  checks.push(mk({ id: 'hours', category: 'content', title: 'Opening or class hours', weight: 1.5, score: hours ? 1 : days ? 0.4 : 0,
-    finding: hours ? 'Opening or class times are in readable text.' : days ? 'Class days are mentioned (e.g. "Monday, Wednesday, Friday"), but we could not find actual opening hours or class times in readable text.' : 'We could not find opening hours or class times in readable text.',
-    why: hours ? undefined : 'Questions like "early morning classes" or "open on Sundays" need times AI can read.',
-    fix: hours ? undefined : 'List opening hours in plain text (e.g. "Mon to Fri 6.30am to 9pm, Sat to Sun 8am to 1pm").',
+  const hoursLabel = profile.hoursLabel ?? 'opening hours';
+  const Hours = hoursLabel.charAt(0).toUpperCase() + hoursLabel.slice(1);
+  if (profile.hoursLabel) checks.push(mk({ id: 'hours', category: 'content', title: Hours, weight: profile.physical ? 1.5 : 0.75, score: hours ? 1 : days ? 0.4 : 0,
+    finding: hours ? `${Hours} are in readable text.` : days ? `Days are mentioned, but we could not find actual ${hoursLabel} in readable text.` : `We could not find ${hoursLabel} in readable text.`,
+    why: hours ? undefined : 'Questions like "open on Sundays" or "open late tonight" need times AI can read.',
+    fix: hours ? undefined : `List ${hoursLabel} in plain text (e.g. "Mon to Fri 9am to 7pm, Sat 10am to 2pm").`,
     effort: hours ? undefined : 'Quick win' }));
 
   // Contact
@@ -86,17 +94,17 @@ export function contentChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'faq-content', category: 'content', title: 'Answers to common questions', weight: 2, score: qsRaw.length >= 5 ? 1 : qsRaw.length >= 2 ? 0.6 : qs.length ? 0.4 : 0,
     finding: qsRaw.length ? `We found ${qsRaw.length} question-style headings, e.g. "${qsRaw[0]}".` : qs.length ? `There are ${qs.length} FAQ-style questions, but they only appear after JavaScript runs.` : 'We did not find a FAQ or question-and-answer content.',
     why: qsRaw.length >= 5 ? undefined : 'AI answers questions, and it favours sources that already phrase content as questions and direct answers.',
-    fix: qsRaw.length >= 5 ? undefined : 'Add a FAQ covering what beginners ask: "Do I need experience?", "What should I bring?", "Is there a trial?", "Where do I park?", "How much is a membership?"',
+    fix: qsRaw.length >= 5 ? undefined : `Add a FAQ answering what new customers ask, e.g. ${profile.faqExamples.map((q) => `"${q}"`).join(', ')}.`,
     effort: qsRaw.length >= 5 ? undefined : 'Moderate',
     evidence: qsRaw.slice(0, 6) }));
 
   // Key pages
-  const want = ['Pricing', 'Schedule', 'Classes / services', 'About', 'FAQ', 'Contact / location'];
+  const want = profile.pages.slice(0, 6).map((k) => PAGE_KINDS[k].label);
   const found = want.filter((w) => pages.some((p) => p.label === w));
   const missingPages = want.filter((w) => !found.includes(w));
   checks.push(mk({ id: 'key-pages', category: 'content', title: 'Essential pages linked from the homepage', weight: 1.5, score: found.length / want.length,
     finding: missingPages.length ? `We found ${list(found) || 'none'} pages, but no clearly linked ${list(missingPages)} page.` : 'All the essential pages a customer (or AI) looks for are linked from your homepage.',
-    why: missingPages.length ? 'AI follows the same links people do. Dedicated pages for each topic make it easy to find the right answer.' : undefined,
+    why: missingPages.length ? `These are the pages people (and AI) expect from ${profile.noun}. AI follows the same links people do, and dedicated pages make the right answer easy to find.` : undefined,
     fix: missingPages.length ? `Add (or link from the main menu) a ${list(missingPages)} page.` : undefined,
     effort: missingPages.length ? 'Moderate' : undefined }));
 
@@ -106,8 +114,8 @@ export function contentChecks(ctx: Ctx): Check[] {
   const altScore = imgs ? alts / imgs : 1;
   checks.push(mk({ id: 'alt-text', category: 'content', title: 'Image descriptions (alt text)', weight: 1, score: altScore,
     finding: imgs ? `${pct(altScore)} of ${imgs} images have a text description.` : 'No images found in the HTML.',
-    why: altScore < 0.8 ? 'AI cannot see images. Alt text is how it learns that a photo shows "small-group strength class in our studio".' : undefined,
-    fix: altScore < 0.8 ? 'Add short, descriptive alt text to photos of your studio, classes and coaches.' : undefined,
+    why: altScore < 0.8 ? `AI cannot see images. Alt text is how it learns that a photo shows "${profile.altExample}".` : undefined,
+    fix: altScore < 0.8 ? 'Add short, descriptive alt text to photos of your products, premises, team and work.' : undefined,
     effort: altScore < 0.8 ? 'Quick win' : undefined }));
 
   // Language

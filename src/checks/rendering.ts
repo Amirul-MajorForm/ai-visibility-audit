@@ -2,9 +2,10 @@ import type { Check } from '../types.js';
 import type { Ctx } from '../crawl.js';
 import type { Facts } from '../page.js';
 import { mk, pct, path, list } from './util.js';
+import { widgetKind, WIDGET_KIND_LABEL } from '../widgets.js';
 
 export const FACT_LABELS: Record<keyof Facts, string> = {
-  price: 'prices', hours: 'opening or class times', phone: 'phone number', postal: 'address', email: 'email address',
+  price: 'prices', hours: 'opening hours or times', phone: 'phone number', postal: 'address', email: 'email address',
 };
 
 export function hiddenFacts(p: Ctx['pages'][number]): (keyof Facts)[] {
@@ -14,7 +15,8 @@ export function hiddenFacts(p: Ctx['pages'][number]): (keyof Facts)[] {
 
 export function renderingChecks(ctx: Ctx): Check[] {
   const checks: Check[] = [];
-  const rendered = ctx.pages.filter((p) => p.rendered && p.rendered.words > 0);
+  // Pages stuck behind a challenge are excluded: their raw content is unknown, and the challenge is reported under access.
+  const rendered = ctx.pages.filter((p) => p.rendered && p.rendered.words > 0 && !p.challenged);
 
   if (!rendered.length) {
     checks.push(mk({ id: 'js-content', category: 'rendering', title: 'Content visible without JavaScript', weight: 4, score: 1, status: 'info',
@@ -51,7 +53,7 @@ export function renderingChecks(ctx: Ctx): Check[] {
     finding: invisible.length
       ? `Your ${list(invisible.map((k) => FACT_LABELS[k]))} ${invisible.length > 1 ? 'only appear' : 'only appears'} after JavaScript runs, so AI assistants cannot read ${invisible.length > 1 ? 'them' : 'it'}.${invisible.includes('email') && cfEmail ? ' Your email is scrambled by Cloudflare\'s "Email Address Obfuscation" feature, which hides it from all bots, including AI.' : ''}`
       : 'Your key facts (such as contact details, address and prices, where shown) are readable without JavaScript.',
-    why: invisible.length ? 'These are exactly the details people ask AI about: "how much is a class at X", "where is X", "how do I contact X".' : undefined,
+    why: invisible.length ? 'These are exactly the details people ask AI about: "how much does X cost", "where is X", "how do I contact X".' : undefined,
     fix: invisible.length
       ? [onlyEmail ? '' : 'Put prices, address and opening hours in plain text on the page, not only inside sliders, tabs or embedded widgets.',
          invisible.includes('email') && cfEmail ? 'For the email: either turn off Email Address Obfuscation in Cloudflare (Scrape Shield), or accept the trade-off and make sure phone and WhatsApp are in plain text.' : ''].filter(Boolean).join(' ')
@@ -60,17 +62,20 @@ export function renderingChecks(ctx: Ctx): Check[] {
     evidence: hidden.map((h) => `${path(h.p.url)}: ${FACT_LABELS[h.k]} only after JavaScript`) }));
 
   const widgets = [...new Set(ctx.pages.flatMap((p) => p.widgets))];
-  const booking = widgets.filter((w) => w !== 'ClassPass');
-  if (booking.length) {
+  if (widgets.length) {
+    const kinds = [...new Set(widgets.map(widgetKind))];
+    const what = list(kinds.map((k) => WIDGET_KIND_LABEL[k]));
     const hasHoursText = ctx.pages.some((p) => p.raw.facts.hours.length > 0);
-    checks.push(mk({ id: 'booking-widget', category: 'rendering', title: 'Class timetable and booking', weight: 2, score: hasHoursText ? 0.8 : 0.4,
-      finding: `Your timetable or booking runs on ${list(booking)}, which loads inside a JavaScript widget. ${hasHoursText ? 'You also have some times in plain text, which helps.' : 'There is no plain-text version of your class schedule, so AI cannot tell what classes run when.'}`,
-      why: 'People ask AI "which studios have 7am classes near Tanjong Pagar". AI can only answer that if your schedule exists as readable text.',
-      fix: 'Keep the booking widget, but add a short plain-text summary next to it: class types, typical weekly times and how to book.',
+    const hasPriceText = ctx.pages.some((p) => p.raw.facts.price.length > 0);
+    const textual = (hasHoursText ? 1 : 0) + (hasPriceText ? 1 : 0);
+    checks.push(mk({ id: 'booking-widget', category: 'rendering', title: 'Booking and third-party widgets', weight: 2, score: textual === 2 ? 0.9 : textual === 1 ? 0.65 : 0.4,
+      finding: `Your ${what} runs on ${list(widgets)}, which loads inside a JavaScript widget that AI crawlers cannot read. ${textual === 2 ? 'Times and prices also appear in plain text, which helps.' : textual === 1 ? 'Some details also appear in plain text, but not all of what the widget shows.' : 'There is no plain-text version of what the widget shows (availability, times, prices).'}`,
+      why: `People ask AI things like "${ctx.profile.query}". AI can only use details that exist as readable text on your pages.`,
+      fix: 'Keep the widget, but add a short plain-text summary next to it: what can be booked or ordered, typical availability or hours, starting prices and how to book.',
       effort: 'Moderate' }));
   } else {
-    checks.push(mk({ id: 'booking-widget', category: 'rendering', title: 'Class timetable and booking', weight: 2, score: 1, status: 'info',
-      finding: 'We did not detect a third-party booking widget on the pages we reviewed.' }));
+    checks.push(mk({ id: 'booking-widget', category: 'rendering', title: 'Booking and third-party widgets', weight: 2, score: 1, status: 'info',
+      finding: 'We did not detect a third-party booking, reservation or ordering widget on the pages we reviewed.' }));
   }
   return checks;
 }

@@ -10,6 +10,8 @@ export interface Job {
   id: string;
   url: string;
   client?: string;
+  /** Profile id or 'auto' */
+  businessType?: string;
   status: JobStatus;
   createdAt: string;
   finishedAt?: string;
@@ -20,6 +22,7 @@ export interface Job {
   host?: string;
   overall?: number;
   grade?: string;
+  businessLabel?: string;
 }
 
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
@@ -63,10 +66,10 @@ export function queuePosition(id: string) {
   return queue.indexOf(id) + 1;
 }
 
-export async function createJob(url: string, client?: string): Promise<Job> {
+export async function createJob(url: string, client?: string, businessType = 'auto'): Promise<Job> {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const id = `${stamp}-${randomBytes(4).toString('hex')}`;
-  const job: Job = { id, url, client: client?.trim() || undefined, status: 'queued', createdAt: new Date().toISOString(), log: [] };
+  const job: Job = { id, url, client: client?.trim() || undefined, businessType, status: 'queued', createdAt: new Date().toISOString(), log: [] };
   jobs.set(id, job);
   await mkdir(jobDir(id), { recursive: true });
   await save(job);
@@ -94,8 +97,8 @@ async function run(job: Job) {
   };
   await save(job);
   try {
-    const { result } = await runAudit(job.url, { client: job.client, dir: jobDir(job.id) }, log);
-    Object.assign(job, { status: 'done', clientName: result.clientName, host: result.host, overall: result.overall, grade: result.grade });
+    const { result } = await runAudit(job.url, { client: job.client, businessType: job.businessType, dir: jobDir(job.id) }, log);
+    Object.assign(job, { status: 'done', clientName: result.clientName, host: result.host, overall: result.overall, grade: result.grade, businessLabel: result.business.label });
     log('Done');
   } catch (e: any) {
     job.status = 'failed';

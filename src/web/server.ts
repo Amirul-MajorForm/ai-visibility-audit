@@ -1,9 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { profileById } from '../profiles.js';
 import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { initJobs, createJob, getJob, listJobs, queuePosition, jobDir } from './jobs.js';
-import { homePage, progressPage, failedPage, resultPage, progressOf } from './ui.js';
+import { homePage, progressPage, failedPage, resultPage, progressOf, stepsHtml } from './ui.js';
 import { validateTarget } from './safety.js';
 import { logoDataUri } from '../report/assets.js';
 
@@ -66,9 +68,11 @@ const server = createServer(async (req, res) => {
       const form = await readForm(req);
       const input = form.get('url') ?? '';
       const client = (form.get('client') ?? '').slice(0, 120);
+      const bt = form.get('business_type') ?? 'auto';
+      const businessType = bt === 'auto' || profileById(bt) ? bt : 'auto';
       const v = await validateTarget(input);
-      if (!v.ok) return send(res, 400, homePage(listJobs(), { error: v.error, url: input, client, logo }));
-      const job = await createJob(v.url, client);
+      if (!v.ok) return send(res, 400, homePage(listJobs(), { error: v.error, url: input, client, businessType, logo }));
+      const job = await createJob(v.url, client, businessType);
       res.writeHead(303, { location: `/audits/${job.id}` });
       return res.end();
     }
@@ -80,7 +84,7 @@ const server = createServer(async (req, res) => {
       if (!job) return send(res, 404, homePage(listJobs(), { error: 'That audit could not be found.', logo }));
 
       if (api) {
-        return send(res, 200, JSON.stringify({ status: job.status, position: queuePosition(id), progress: progressOf(job), log: job.log, error: job.error }), 'application/json');
+        return send(res, 200, JSON.stringify({ status: job.status, position: queuePosition(id), progress: progressOf(job), steps: stepsHtml(job), log: job.log, error: job.error }), 'application/json');
       }
       if (file) {
         if (job.status !== 'done') return send(res, 409, 'Report not ready', 'text/plain');
@@ -88,7 +92,14 @@ const server = createServer(async (req, res) => {
         const types: Record<string, string> = { html: 'text/html; charset=utf-8', pdf: 'application/pdf', json: 'application/json' };
         return sendFile(res, join(jobDir(id), file), types[ext], ext === 'pdf' ? { 'content-disposition': `attachment; filename="${name}"` } : {});
       }
-      if (job.status === 'done') return send(res, 200, resultPage(job, logo));
+      if (job.status === 'done') {
+        try {
+          const result = JSON.parse(await readFile(join(jobDir(id), 'report.json'), 'utf8'));
+          return send(res, 200, resultPage(job, result, logo));
+        } catch {
+          return send(res, 200, failedPage({ ...job, error: 'The saved results for this audit could not be read. Please run it again.' }, logo));
+        }
+      }
       if (job.status === 'failed') return send(res, 200, failedPage(job, logo));
       return send(res, 200, progressPage(job, queuePosition(id), logo));
     }

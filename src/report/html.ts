@@ -338,7 +338,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   <div class="cover-main">
     <div class="kicker">AI Visibility Audit</div>
     <h1>${esc(r.clientName)}</h1>
-    <div class="domain">${esc(domain)}</div>
+    <div class="domain">${esc(domain)} · ${esc(r.business.label)}</div>
     <div class="cover-score">
       ${ring(r.overall, 150, 13, 'rgba(255,255,255,.14)', '#ffffff', 'OUT OF 100')}
       <div>
@@ -425,6 +425,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
       <li>Sitemap, indexing, canonical tags and server speed</li>
     </ul></div>
     <div class="box"><h3>Good to know</h3><ul>
+      <li>We assessed the site as <strong>${esc(r.business.label)}</strong> (${r.business.detected ? esc(r.business.reason) : 'chosen by the auditor'}), which decides which pages and details we expect.</li>
       <li>This is a point-in-time technical check of ${r.pages.length} key pages, run on ${esc(date)}.</li>
       <li>A strong score means AI <em>can</em> read the site. It does not guarantee AI will recommend it.</li>
       <li>Off-site signals (Google reviews, directories, press, Reddit) also shape AI answers and are not scored here.</li>
@@ -435,7 +436,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
     <div>
       <div class="kicker">Next step · Layer 2</div>
       <h3>Is AI actually recommending you?</h3>
-      <p>The next stage of this audit puts real customer questions to ChatGPT, Claude and Gemini, such as "best personal training studio in Singapore", and measure how often ${esc(r.clientName)} is mentioned against competitors.</p>
+      <p>The next stage of this audit puts real customer questions to ChatGPT, Claude and Gemini, such as "${esc(r.business.query)}", and measures how often ${esc(r.clientName)} is mentioned against competitors.</p>
     </div>
     <div class="cta">Talk to ${esc(BRAND.name)}</div>
   </div>

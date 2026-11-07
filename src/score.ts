@@ -2,7 +2,7 @@ import type { AuditResult, Category, CategoryId, Check } from './types.js';
 import type { Ctx } from './crawl.js';
 import { accessChecks } from './checks/access.js';
 import { renderingChecks, hiddenFacts, FACT_LABELS } from './checks/rendering.js';
-import { schemaChecks, businessNode, BUSINESS_FIELDS } from './checks/schema.js';
+import { schemaChecks, businessNode, fieldsFor } from './checks/schema.js';
 import { contentChecks } from './checks/content.js';
 import { discoveryChecks } from './checks/discovery.js';
 import { list } from './checks/util.js';
@@ -72,7 +72,8 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
   const rendered = ctx.pages.filter((p) => p.rendered && p.rendered.words);
   const vis = rendered.length ? rendered.reduce((s, p) => s + Math.min(1, p.raw.words / p.rendered!.words), 0) / rendered.length : 1;
   const biz = businessNode(ctx);
-  const bizFields = biz ? BUSINESS_FIELDS.filter((f) => f.test(biz)).length : 0;
+  const fields = fieldsFor(ctx.profile);
+  const bizFields = biz ? fields.filter((f) => f.test(biz)).length : 0;
 
   const summary =
     `${name}'s website scores ${overall} out of 100 for AI readiness, which we rate as "${g}". ` +
@@ -89,6 +90,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
     finalUrl: ctx.pages[0].url,
     host: ctx.host,
     clientName: name,
+    business: { id: ctx.profile.id, label: ctx.profile.label, detected: ctx.detection.detected, confidence: ctx.detection.confidence, reason: ctx.detection.reason, query: ctx.profile.query },
     overall,
     grade: g,
     summary,
@@ -109,7 +111,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
     stats: [
       { label: 'AI search crawlers confirmed allowed', value: `${okBots.length}/${answerBots.length}`, note: ctx.robotsState === 'broken' ? 'robots.txt is unreadable' : 'robots.txt and live test' },
       { label: 'Content readable without JavaScript', value: rendered.length ? `${Math.round(vis * 100)}%` : 'n/a', note: rendered.length ? `across ${rendered.length} pages` : 'browser check did not run' },
-      { label: 'Business details in structured data', value: `${bizFields}/${BUSINESS_FIELDS.length}`, note: biz ? `as ${typesOf(biz).join(', ')}` : 'no business markup' },
+      { label: 'Business details in structured data', value: `${bizFields}/${fields.length}`, note: biz ? `as ${typesOf(biz).join(', ')}` : 'no business markup' },
       { label: 'Pages reviewed', value: String(ctx.pages.length), note: 'homepage and key pages' },
     ],
   };
