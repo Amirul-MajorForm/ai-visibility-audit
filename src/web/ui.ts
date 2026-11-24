@@ -1,7 +1,8 @@
 import { BRAND } from '../brand.js';
 import { PROFILES } from '../profiles.js';
-import { impactOf } from '../score.js';
-import type { AuditResult, BotResult, Check, Status } from '../types.js';
+import { SEARCH_DBS } from '../seo/search.js';
+import { normalizeResult, impactIn, MODULE_NAMES } from '../score.js';
+import type { AuditResult, BotResult, Check, ModuleId, Status } from '../types.js';
 import type { Job } from './jobs.js';
 
 export const esc = (s: unknown) =>
@@ -178,6 +179,54 @@ pre.log{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--mute
 
 code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
 
+/* Audit selection */
+.audit-types{border:0;padding:0;margin:16px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.audit-types legend{font-size:12.5px;font-weight:600;margin-bottom:6px;padding:0}
+.type-card{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border-strong);border-radius:10px;padding:12px 14px;cursor:pointer;margin:0;font-weight:400}
+.type-card:has(input:checked){border-color:var(--accent);background:#f2fbf8}
+.type-card input{width:16px;height:16px;margin-top:2px;accent-color:var(--primary);flex:none}
+.type-card b{display:block;font-size:14px}
+.type-card small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45;margin-top:2px}
+.seo-opts{display:grid;grid-template-columns:180px 1fr 200px;gap:12px;align-items:end;margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:10px}
+label.check{display:flex;align-items:center;gap:8px;font-weight:500;font-size:13.5px;margin-bottom:9px;cursor:pointer}
+label.check input{width:16px;height:16px;accent-color:var(--primary)}
+label.check.disabled{color:var(--subtle);cursor:not-allowed}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.score-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:2px 9px 2px 8px;font-size:12.5px;background:var(--surface)}
+.score-chip .lbl{color:var(--muted);font-weight:600;font-size:11.5px}
+.score-chip .score-num{font-size:13.5px}
+.dotband{width:8px;height:8px;border-radius:50%}
+.dotband.strong{background:var(--strong)} .dotband.good{background:var(--good)} .dotband.work{background:var(--work)} .dotband.risk{background:var(--risk)}
+.badge.both{background:var(--primary);color:var(--mint)}
+.badge.mod{background:#eef0f3;color:#45525b}
+
+/* SEO panels */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{padding:14px 16px;display:flex;flex-direction:column}
+.kpi b{font-family:'Space Grotesk',sans-serif;font-size:26px;line-height:1.1}
+.kpi span{font-weight:600;font-size:13px;margin-top:4px}
+.kpi small{color:var(--subtle);font-size:12px}
+.status-kpi{gap:6px;justify-content:center}
+.sb{display:grid;grid-template-columns:84px 1fr 32px;gap:8px;align-items:center;font-size:12px}
+.sb b{font-size:12.5px;text-align:right;font-family:inherit}
+.sb-bar{height:8px;background:#eceef1;border-radius:99px;overflow:hidden}
+.sb-bar i{display:block;height:100%;border-radius:99px}
+.sb-bar i.ok{background:var(--strong)} .sb-bar i.mid{background:var(--work)} .sb-bar i.bad{background:var(--risk)}
+.issue{display:inline-block;font-size:11.5px;background:var(--warn-bg);color:var(--warn-fg);border-radius:5px;padding:1px 6px;margin:1px 0;white-space:nowrap}
+.vital{font-weight:600;padding:1px 7px;border-radius:6px;font-size:12.5px}
+.vital.good{background:var(--good-bg);color:var(--good-fg)} .vital.ok{background:var(--warn-bg);color:var(--warn-fg)} .vital.poor{background:var(--bad-bg);color:var(--bad-fg)}
+.crawl-table td{padding:9px 16px}
+.url-cell{max-width:380px}
+.url-cell a{text-decoration:none;font-weight:500;word-break:break-all}
+.url-cell a:hover{text-decoration:underline}
+.ellip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+table.compact td{padding:8px 16px}
+.trend{display:flex;align-items:flex-end;gap:6px;height:120px;padding-bottom:20px}
+.tb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative}
+.tb i{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0}
+.tb span{position:absolute;bottom:-18px;font-size:11px;color:var(--subtle)}
+
 /* Pages: AI view vs visitor view */
 .pg-head{display:grid;grid-template-columns:minmax(0,1.4fr) 260px minmax(0,1fr) 20px;gap:16px;padding:8px 20px;font-size:12px;font-weight:600;color:var(--muted);background:#fafbfc;border-bottom:1px solid var(--border)}
 .pg{border-bottom:1px solid var(--border)}
@@ -213,7 +262,9 @@ mark.vis{background:#dff3e8;color:var(--good-fg)}
   .cats{grid-template-columns:repeat(3,1fr)}
   .new-audit{grid-template-columns:1fr 1fr}
   .prio .body{grid-template-columns:1fr;padding-left:20px}
-  .compare{grid-template-columns:1fr}
+  .compare,.grid2{grid-template-columns:1fr}
+  .kpis{grid-template-columns:1fr 1fr}
+  .seo-opts,.audit-types{grid-template-columns:1fr}
   .pg summary,.pg-head{grid-template-columns:minmax(0,1fr) 150px 20px}
   .pg .pg-notes,.pg-head span:nth-child(3){display:none}
 }
@@ -237,7 +288,7 @@ function layout(title: string, body: string, opts: { logo?: string; nav?: 'audit
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} · AI Visibility Audit</title>
+<title>${esc(title)} · Website Audit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
@@ -245,7 +296,7 @@ function layout(title: string, body: string, opts: { logo?: string; nav?: 'audit
 </head>
 <body>
 <nav class="nav">
-  <a class="logo" href="/">${opts.logo ? `<img src="${opts.logo}" alt="${esc(BRAND.name)}">` : `<span class="mark">M</span><span>${esc(BRAND.name)}</span>`}<span class="app">AI Visibility Audit</span></a>
+  <a class="logo" href="/">${opts.logo ? `<img src="${opts.logo}" alt="${esc(BRAND.name)}">` : `<span class="mark">M</span><span>${esc(BRAND.name)}</span>`}<span class="app">Website Audit</span></a>
   <div class="links"><a href="/" class="${opts.nav === 'audits' ? 'on' : ''}">Audits</a></div>
   <div class="grow"></div>
   <a class="btn primary sm" href="/#new">+ New audit</a>
@@ -275,7 +326,31 @@ function statusBadge(j: Job) {
 
 // ---------------------------------------------------------------- Home
 
-export function homePage(jobs: Job[], opts: { error?: string; url?: string; client?: string; businessType?: string; logo?: string } = {}) {
+export interface HomeOptions {
+  error?: string;
+  url?: string;
+  client?: string;
+  businessType?: string;
+  modules?: ModuleId[];
+  crawlLimit?: number;
+  searchData?: boolean;
+  searchDb?: string;
+  logo?: string;
+  /** Apify token configured on the server */
+  searchAvailable?: boolean;
+}
+
+function scoreChips(j: Job) {
+  if (j.status !== 'done') return statusBadge(j);
+  const scores = j.scores ?? { ai: j.overall };
+  return `<div class="chips">${(['ai', 'seo'] as ModuleId[])
+    .filter((m) => scores[m] !== undefined)
+    .map((m) => `<span class="score-chip"><span class="lbl">${m === 'ai' ? 'AI' : 'SEO'}</span><span class="score-num">${scores[m]}</span><span class="dotband ${band(scores[m]!)}"></span></span>`)
+    .join('')}</div>`;
+}
+
+export function homePage(jobs: Job[], opts: HomeOptions = {}) {
+  const mods = opts.modules ?? ['ai', 'seo'];
   const rows = jobs
     .map((j) => {
       const name = j.clientName ?? j.client ?? hostOf(j.url);
@@ -283,31 +358,47 @@ export function homePage(jobs: Job[], opts: { error?: string; url?: string; clie
       return `<tr class="link" data-href="/audits/${esc(j.id)}" data-search="${esc(search)}">
         <td><a class="row-title" href="/audits/${esc(j.id)}">${esc(name)}</a><div class="subtle small">${esc(hostOf(j.url))}</div></td>
         <td class="hide-sm muted">${esc(j.businessLabel ?? '')}</td>
-        <td>${j.status === 'done' ? scoreCell(j.overall ?? 0) : statusBadge(j)}</td>
-        <td class="hide-sm muted">${esc(j.grade ?? '')}</td>
+        <td>${scoreChips(j)}</td>
         <td class="muted small">${esc(fmt(j.createdAt))}</td>
         <td class="num">${j.status === 'done' ? `<a class="btn sm" href="/audits/${esc(j.id)}/report.pdf" title="Download PDF">PDF</a>` : ''}</td>
       </tr>`;
     })
     .join('');
+  const limits = [50, 150, 300, 500];
+  const lim = opts.crawlLimit ?? 150;
 
   return layout(
     'Audits',
     `<main class="page">
   <div class="head">
-    <div><h1>Audits</h1><p class="muted">Check how easily ChatGPT, Claude, Gemini and Perplexity can find, read and understand a website.</p></div>
+    <div><h1>Audits</h1><p class="muted">Check a website's SEO and how easily ChatGPT, Claude, Gemini and Perplexity can find, read and understand it.</p></div>
   </div>
 
   <section class="card card-pad" id="new" style="margin-bottom:20px">
     <h2 style="margin-bottom:14px">New audit</h2>
     ${opts.error ? `<div class="alert err">${esc(opts.error)}</div>` : ''}
-    <form class="new-audit" method="post" action="/audits">
-      <div><label for="url">Website</label><input id="url" name="url" placeholder="example.com.sg" value="${esc(opts.url ?? '')}" required inputmode="url" autocomplete="off" ${opts.error || !jobs.length ? 'autofocus' : ''}></div>
-      <div><label for="client">Client name <span class="subtle">(optional)</span></label><input id="client" name="client" placeholder="Taken from the site" value="${esc(opts.client ?? '')}" autocomplete="off"></div>
-      <div><label for="business_type">Business type</label>${businessSelect('business_type', opts.businessType)}</div>
-      <button class="btn primary" type="submit" style="height:36px">Run audit</button>
+    <form method="post" action="/audits" id="newform">
+      <div class="new-audit">
+        <div><label for="url">Website</label><input id="url" name="url" placeholder="example.com.sg" value="${esc(opts.url ?? '')}" required inputmode="url" autocomplete="off" ${opts.error || !jobs.length ? 'autofocus' : ''}></div>
+        <div><label for="client">Client name <span class="subtle">(optional)</span></label><input id="client" name="client" placeholder="Taken from the site" value="${esc(opts.client ?? '')}" autocomplete="off"></div>
+        <div><label for="business_type">Business type</label>${businessSelect('business_type', opts.businessType)}</div>
+        <button class="btn primary" type="submit" style="height:36px">Run audit</button>
+      </div>
+      <fieldset class="audit-types">
+        <legend>Audits to run</legend>
+        <label class="type-card"><input type="checkbox" name="audits" value="ai"${mods.includes('ai') ? ' checked' : ''}><span><b>AI visibility</b><small>AI crawler access, content AI can read, structured data, answers to customer questions</small></span></label>
+        <label class="type-card"><input type="checkbox" name="audits" value="seo"${mods.includes('seo') ? ' checked' : ''}><span><b>SEO</b><small>Site crawl, broken pages, indexing, titles and descriptions, speed on mobile, site structure</small></span></label>
+      </fieldset>
+      <div class="seo-opts" id="seoopts"${mods.includes('seo') ? '' : ' hidden'}>
+        <div><label for="pages">Pages to crawl</label><select id="pages" name="pages">${limits.map((n) => `<option value="${n}"${n === lim ? ' selected' : ''}>Up to ${n}</option>`).join('')}</select></div>
+        <div class="search-opt">
+          <label class="check${opts.searchAvailable ? '' : ' disabled'}"><input type="checkbox" name="search" value="on"${opts.searchAvailable && opts.searchData !== false ? ' checked' : ''}${opts.searchAvailable ? '' : ' disabled'}> Include search data <span class="subtle">(Semrush via Apify, about US$0.20)</span></label>
+          ${opts.searchAvailable ? '' : '<div class="field-hint">Not set up: add an APIFY_TOKEN to enable rankings, competitors and backlinks.</div>'}
+        </div>
+        <div><label for="db">Search data country</label><select id="db" name="db"${opts.searchAvailable ? '' : ' disabled'}>${SEARCH_DBS.map((d) => `<option value="${d.id}"${d.id === (opts.searchDb ?? 'sg') ? ' selected' : ''}>${esc(d.label)}</option>`).join('')}</select></div>
+      </div>
+      <p class="field-hint" id="timehint"></p>
     </form>
-    <p class="field-hint">Takes about a minute. The business type decides which pages and details are expected.</p>
   </section>
 
   <section class="card">
@@ -318,7 +409,7 @@ export function homePage(jobs: Job[], opts: { error?: string; url?: string; clie
     ${
       jobs.length
         ? `<div class="table-scroll"><table>
-            <thead><tr><th>Client</th><th class="hide-sm">Business type</th><th>Score</th><th class="hide-sm">Rating</th><th>Run</th><th></th></tr></thead>
+            <thead><tr><th>Client</th><th class="hide-sm">Business type</th><th>Scores</th><th>Run</th><th></th></tr></thead>
             <tbody id="rows">${rows}</tbody></table></div>
             <div class="empty" id="nomatch" hidden>No audits match that filter.</div>`
         : '<div class="empty">No audits yet. Run your first one above.</div>'
@@ -329,6 +420,17 @@ export function homePage(jobs: Job[], opts: { error?: string; url?: string; clie
 document.querySelectorAll('tr.link').forEach(function(tr){tr.addEventListener('click',function(e){if(e.target.closest('a,button'))return;location.href=tr.dataset.href})});
 var f=document.getElementById('filter');
 if(f)f.addEventListener('input',function(){var q=f.value.trim().toLowerCase(),n=0;document.querySelectorAll('#rows tr').forEach(function(tr){var m=!q||tr.dataset.search.indexOf(q)>-1;tr.hidden=!m;if(m)n++});document.getElementById('nomatch').hidden=n>0});
+(function(){
+  var boxes=[].slice.call(document.querySelectorAll('input[name=audits]')),seo=document.querySelector('input[name=audits][value=seo]'),opts=document.getElementById('seoopts'),hint=document.getElementById('timehint'),pages=document.getElementById('pages');
+  function upd(){
+    opts.hidden=!seo.checked;
+    var any=boxes.some(function(b){return b.checked});
+    boxes.forEach(function(b){b.setCustomValidity(any?'':'Choose at least one audit')});
+    var mins=(boxes[0].checked?1:0)+(seo.checked?Math.ceil(Number(pages.value)/100)+1:0);
+    hint.textContent=any?'Takes about '+Math.max(1,mins)+' minute'+(mins>1?'s':'')+'. The business type decides which pages and details are expected.':'';
+  }
+  boxes.concat([pages]).forEach(function(b){b.addEventListener('change',upd)});upd();
+})();
 </script>`,
     { logo: opts.logo, nav: 'audits' },
   );
@@ -336,22 +438,31 @@ if(f)f.addEventListener('input',function(){var q=f.value.trim().toLowerCase(),n=
 
 // ---------------------------------------------------------------- Progress
 
-const STAGES: { key: string; label: string }[] = [
-  { key: 'Fetching', label: 'Loading the website' },
-  { key: 'Checking robots', label: 'Reading robots.txt' },
-  { key: 'Rendering homepage', label: 'Rendering the homepage in a browser' },
-  { key: 'Business type', label: 'Identifying the business type' },
-  { key: 'Analysing', label: 'Reviewing key pages' },
-  { key: 'Testing access', label: 'Visiting as each AI crawler' },
-  { key: 'Looking for sitemap', label: 'Checking sitemap and llms.txt' },
-  { key: 'Scoring', label: 'Scoring' },
-  { key: 'Building report', label: 'Building the client report' },
+const STAGES: { re: RegExp; label: string; module?: ModuleId }[] = [
+  { re: /Fetching https?:/, label: 'Loading the website' },
+  { re: /Checking robots/, label: 'Reading robots.txt' },
+  { re: /Rendering homepage/, label: 'Rendering the homepage in a browser' },
+  { re: /Business type/, label: 'Identifying the business type' },
+  { re: /Analysing/, label: 'Reviewing key pages' },
+  { re: /Testing access/, label: 'Visiting as each AI crawler', module: 'ai' },
+  { re: /Looking for sitemap/, label: 'Checking sitemap and llms.txt' },
+  { re: /Crawling the site|Crawled \d+/, label: 'Crawling the site', module: 'seo' },
+  { re: /page speed|PageSpeed/i, label: 'Measuring speed on mobile', module: 'seo' },
+  { re: /Fetching search data/, label: 'Fetching search data', module: 'seo' },
+  { re: /Scoring/, label: 'Scoring' },
+  { re: /Building report|Writing PDF/, label: 'Building the client report' },
 ];
 
+function stagesFor(job: Job) {
+  const mods = job.modules ?? ['ai'];
+  return STAGES.filter((s) => !s.module || mods.includes(s.module)).filter((s) => !/search data/.test(s.label) || job.searchData);
+}
+
 function stageIndex(job: Job) {
+  const stages = stagesFor(job);
   let idx = -1;
   for (const line of job.log) {
-    const i = STAGES.findIndex((s) => line.includes(s.key));
+    const i = stages.findIndex((s) => s.re.test(line));
     if (i > idx) idx = i;
   }
   return idx;
@@ -359,18 +470,25 @@ function stageIndex(job: Job) {
 
 export function progressOf(job: Job): number {
   if (job.status === 'done') return 100;
+  const stages = stagesFor(job);
   const analysed = job.log.filter((l) => l.includes('Analysing')).length;
-  return Math.min(98, Math.round(((stageIndex(job) + 1 + Math.min(analysed, 7) * 0.5) / (STAGES.length + 3.5)) * 100));
+  const crawled = Number([...job.log].reverse().find((l) => /Crawled \d+/.test(l))?.match(/Crawled (\d+)/)?.[1] ?? 0);
+  const crawlShare = job.crawlLimit ? Math.min(1, crawled / job.crawlLimit) * 3 : 0;
+  return Math.min(98, Math.round(((stageIndex(job) + 1 + Math.min(analysed, 7) * 0.5 + crawlShare) / (stages.length + 3.5 + (job.modules?.includes('seo') ? 3 : 0))) * 100));
 }
 
 export function stepsHtml(job: Job) {
+  const stages = stagesFor(job);
   const idx = stageIndex(job);
   const pages = job.log.filter((l) => l.includes('Analysing')).length;
-  return STAGES.map((s, i) => {
-    const state = i < idx ? 'done' : i === idx ? (job.status === 'running' ? 'active' : 'done') : '';
-    const extra = s.key === 'Analysing' && pages ? ` <span class="subtle">(${pages})</span>` : '';
-    return `<li class="${state}"><span class="ic">${state === 'done' ? '✓' : ''}</span>${esc(s.label)}${extra}</li>`;
-  }).join('');
+  const crawled = [...job.log].reverse().find((l) => /Crawled \d+/.test(l))?.match(/Crawled (\d+)/)?.[1];
+  return stages
+    .map((s, i) => {
+      const state = i < idx ? 'done' : i === idx ? (job.status === 'running' ? 'active' : 'done') : '';
+      const extra = /Reviewing key pages/.test(s.label) && pages ? ` <span class="subtle">(${pages})</span>` : /Crawling/.test(s.label) && crawled ? ` <span class="subtle">(${crawled} pages)</span>` : '';
+      return `<li class="${state}"><span class="ic">${state === 'done' ? '✓' : ''}</span>${esc(s.label)}${extra}</li>`;
+    })
+    .join('');
 }
 
 export function progressPage(job: Job, position: number, logo?: string) {
@@ -383,7 +501,7 @@ export function progressPage(job: Job, position: number, logo?: string) {
   <section class="card card-pad">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <strong id="msg">${position > 0 ? `Waiting in queue (position ${position})` : 'Audit in progress'}</strong>
-      <span class="subtle small">Usually about a minute</span>
+      <span class="subtle small">${(job.modules ?? ['ai']).includes('seo') ? 'Usually 2 to 5 minutes' : 'Usually about a minute'}</span>
     </div>
     <div class="meter" style="height:8px;margin-bottom:16px"><span id="bar" class="strong" style="width:${progressOf(job)}%;transition:width .6s"></span></div>
     <ul class="steps" id="steps">${stepsHtml(job)}</ul>
@@ -431,6 +549,113 @@ export function failedPage(job: Job, logo?: string) {
   );
 }
 
+// ---------------------------------------------------------------- SEO panels
+
+const fmtNum = (n?: number) => (n === undefined || n === null ? '–' : n.toLocaleString('en-SG'));
+const secs = (ms?: number) => (ms ? `${(ms / 1000).toFixed(1)}s` : '–');
+const vital = (v: number | undefined, good: number, poor: number, f: (x: number) => string) =>
+  v === undefined ? '<span class="subtle">–</span>' : `<span class="vital ${v <= good ? 'good' : v <= poor ? 'ok' : 'poor'}">${f(v)}</span>`;
+const pathOnly = (u: string) => {
+  try {
+    const x = new URL(u);
+    return decodeURI(x.pathname + x.search);
+  } catch {
+    return u;
+  }
+};
+
+function crawlPanel(r: AuditResult) {
+  const c = r.siteCrawl!;
+  const withIssues = c.pages.filter((p) => p.issues.length);
+  const label = (k: string) => (k === '200' ? 'OK' : k === 'Redirected' ? 'Redirected' : k === 'Error' ? 'No response' : `Error ${k}`);
+  const speed = (r.speed ?? []).filter((x) => !x.error);
+  const psi = speed.some((x) => x.source === 'pagespeed');
+  const field = speed.some((x) => x.field);
+  const rows = [...c.pages]
+    .sort((a, b) => b.issues.length - a.issues.length || (a.depth ?? 99) - (b.depth ?? 99))
+    .map(
+      (p) => `<tr data-issues="${p.issues.length}" data-search="${esc((p.url + ' ' + p.title + ' ' + p.issues.join(' ')).toLowerCase())}">
+      <td class="url-cell"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(pathOnly(p.url))}</a><div class="subtle small ellip">${esc(p.title || '(no title)')}</div></td>
+      <td>${p.status === 200 && !p.redirects ? '<span class="badge pass">200</span>' : p.status === 200 ? '<span class="badge warn">Redirect</span>' : `<span class="badge fail">${p.status || 'Error'}</span>`}</td>
+      <td>${p.issues.map((i) => `<span class="issue">${esc(i)}</span>`).join(' ') || '<span class="subtle">–</span>'}</td>
+      <td class="num">${p.words || '–'}</td>
+      <td class="num">${p.depth ?? '<span class="subtle">–</span>'}</td>
+      <td class="num">${p.inlinks}</td>
+    </tr>`,
+    )
+    .join('');
+  return `
+  <div class="kpis">
+    <div class="card kpi"><b>${c.pagesCrawled}</b><span>Pages crawled</span><small>${c.limitReached ? `limit of ${c.limit} reached` : 'whole site'}</small></div>
+    <div class="card kpi"><b>${c.sitemapUrls}</b><span>URLs in sitemap</span><small>${c.sitemapUrls ? 'from your XML sitemap' : 'no sitemap found'}</small></div>
+    <div class="card kpi"><b>${withIssues.length}</b><span>Pages with issues</span><small>of ${c.pagesCrawled}</small></div>
+    <div class="card kpi status-kpi">${Object.entries(c.statusCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `<div class="sb"><span>${label(k)}</span><span class="sb-bar"><i class="${k === '200' ? 'ok' : k === 'Redirected' ? 'mid' : 'bad'}" style="width:${Math.max(3, (n / c.pagesCrawled) * 100)}%"></i></span><b>${n}</b></div>`)
+      .join('')}</div>
+  </div>
+  ${
+    speed.length
+      ? `<div class="card" style="margin-bottom:16px">
+    <div class="card-head"><h2>Speed on mobile</h2><span class="subtle small">${psi ? 'Google PageSpeed Insights' : 'Measured in our browser on a phone-sized screen (fast connection)'}</span></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Page</th>${psi ? '<th class="num">Score</th>' : ''}<th class="num">Main content (LCP)</th><th class="num">Layout shift (CLS)</th>${field ? '<th class="num">Real users LCP / INP</th>' : ''}<th class="num">Page weight</th></tr></thead>
+      <tbody>${speed
+        .map(
+          (x) => `<tr><td><strong>${esc(x.label)}</strong><div class="subtle small">${esc(pathOnly(x.url))}</div></td>
+        ${psi ? `<td class="num">${x.performance !== undefined ? vital(100 - x.performance, 10, 50, () => String(x.performance)) : '–'}</td>` : ''}
+        <td class="num">${vital(x.lab.lcpMs, 2500, 4000, secs)}</td><td class="num">${vital(x.lab.cls, 0.1, 0.25, (v) => v.toFixed(2))}</td>
+        ${field ? `<td class="num">${x.field ? `${vital(x.field.lcpMs, 2500, 4000, secs)} / ${vital(x.field.inpMs, 200, 500, (v) => `${Math.round(v)}ms`)}` : '<span class="subtle">not enough data</span>'}</td>` : ''}
+        <td class="num">${x.lab.bytes ? `${(x.lab.bytes / 1e6).toFixed(1)} MB` : '–'}</td></tr>`,
+        )
+        .join('')}</tbody>
+    </table></div>
+  </div>`
+      : ''
+  }
+  <div class="card">
+    <div class="toolbar">
+      <label class="check" style="margin:0"><input type="checkbox" id="onlyissues" checked> Only pages with issues</label>
+      <input id="crawlq" type="search" placeholder="Filter by URL, title or issue" style="max-width:280px;height:32px">
+      <span class="subtle small" id="crawlcount"></span>
+    </div>
+    <div class="table-scroll"><table class="crawl-table">
+      <thead><tr><th>Page</th><th>Status</th><th>Issues</th><th class="num">Words</th><th class="num">Clicks deep</th><th class="num">Links in</th></tr></thead>
+      <tbody id="crawlrows">${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function searchPanel(r: AuditResult) {
+  const d = r.search;
+  if (!d) return `<div class="card card-pad"><p class="muted">${esc(r.searchNote ?? 'No search data.')}</p></div>`;
+  const dbLabel = SEARCH_DBS.find((x) => x.id === d.db)?.label ?? d.db.toUpperCase();
+  const hasTraffic = d.trafficTrend.some((t) => t.traffic > 0);
+  const maxT = Math.max(1, ...d.trafficTrend.map((t) => t.traffic));
+  const table = (head: string, body: string) => `<div class="table-scroll"><table class="compact"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `
+  <div class="kpis">
+    <div class="card kpi"><b>${fmtNum(d.authorityScore)}</b><span>Authority score</span><small>Semrush, 0 to 100</small></div>
+    <div class="card kpi"><b>${fmtNum(d.backlinks)}</b><span>Backlinks</span><small>links from other sites</small></div>
+    <div class="card kpi"><b>${d.topKeywords.filter((k) => (k.position ?? 99) <= 10).length}</b><span>Top-10 rankings</span><small>among top keywords</small></div>
+    <div class="card kpi"><b>${hasTraffic ? fmtNum(d.trafficTrend[d.trafficTrend.length - 1].traffic) : '–'}</b><span>Est. organic visits / month</span><small>${hasTraffic ? 'latest month' : 'no estimate for this market'}</small></div>
+  </div>
+  ${hasTraffic ? `<div class="card card-pad" style="margin-bottom:16px"><h2 style="margin-bottom:10px">Organic traffic trend</h2><div class="trend">${d.trafficTrend.map((t) => `<div class="tb" title="${t.month}: ${fmtNum(t.traffic)}"><i style="height:${Math.max(2, (t.traffic / maxT) * 100)}%"></i><span>${t.month.slice(5)}</span></div>`).join('')}</div></div>` : ''}
+  <div class="grid2">
+    <div class="card"><div class="card-head"><h2>Keywords ${esc(r.clientName)} ranks for</h2></div>
+      ${d.topKeywords.length ? table('<th>Keyword</th><th class="num">Position</th><th class="num">Searches/mo</th>', d.topKeywords.map((k) => `<tr><td>${esc(k.phrase)}${k.url ? `<div class="subtle small">${esc(k.url.replace(/^https?:\/\//, ''))}</div>` : ''}</td><td class="num">${k.position ?? '–'}</td><td class="num">${fmtNum(k.volume)}</td></tr>`).join('')) : '<div class="empty">No ranking keywords in this database.</div>'}
+    </div>
+    <div class="card"><div class="card-head"><h2>Organic competitors</h2></div>
+      ${d.competitors.length ? table('<th>Site</th><th class="num">Shared keywords</th>', d.competitors.map((c) => `<tr><td><a href="https://${esc(c.domain)}" target="_blank" rel="noopener">${esc(c.domain)}</a></td><td class="num">${fmtNum(c.commonKeywords)}</td></tr>`).join('')) : '<div class="empty">No competitors identified.</div>'}
+    </div>
+  </div>
+  ${d.keywordIdeas.length ? `<div class="card" style="margin-top:16px"><div class="card-head"><h2>Keyword opportunities</h2><span class="subtle small">related to ${esc(d.seeds.map((x) => `"${x}"`).join(' and '))}</span></div>
+    ${table('<th>Keyword</th><th class="num">Searches/mo</th><th class="num">Difficulty</th><th class="num">CPC (USD)</th>', d.keywordIdeas.map((k) => `<tr><td>${esc(k.phrase)}</td><td class="num">${fmtNum(k.volume)}</td><td class="num">${typeof k.difficulty === 'number' ? `<span class="vital ${k.difficulty < 30 ? 'good' : k.difficulty < 60 ? 'ok' : 'poor'}">${k.difficulty}</span>` : '–'}</td><td class="num">${typeof k.cpc === 'number' ? k.cpc.toFixed(2) : '–'}</td></tr>`).join(''))}</div>` : ''}
+  ${d.topBacklinks.length ? `<div class="card" style="margin-top:16px"><div class="card-head"><h2>Strongest backlinks</h2></div>
+    ${table('<th>Linking page</th><th>Anchor text</th><th class="num">Authority</th>', d.topBacklinks.map((b) => `<tr><td><a href="${esc(b.sourceUrl)}" target="_blank" rel="noopener">${esc(b.sourceTitle || b.sourceUrl)}</a><div class="subtle small">${esc(new URL(b.sourceUrl).host)}</div></td><td class="muted">${esc(b.anchor || '–')}</td><td class="num">${b.authority ?? '–'}</td></tr>`).join(''))}</div>` : ''}
+  <p class="subtle small" style="margin-top:12px">Semrush estimates for the ${esc(dbLabel)} database, for ${esc(d.domain)}, via Apify${d.costUsd ? ` (cost US$${d.costUsd.toFixed(2)})` : ''}. Modelled estimates, not the client's real Google data, and not part of the score.${d.notes.length ? ' ' + esc(d.notes.join(' ')) : ''}</p>`;
+}
+
 // ---------------------------------------------------------------- Result
 
 const STATUS: Record<Status, [string, string]> = { pass: ['Good', 'pass'], warn: ['Improve', 'warn'], fail: ['Fix', 'fail'], info: ['Note', 'info'] };
@@ -441,14 +666,32 @@ const PURPOSE: Record<BotResult['purpose'], string> = { search: 'Search index', 
 const badge = ([label, cls]: [string, string]) => `<span class="badge ${cls}">${esc(label)}</span>`;
 
 function impact(c: Check, r: AuditResult): [string, string] {
-  const v = impactOf(c, r.categories);
+  const v = impactIn(c, r);
   return v >= 4 ? ['High impact', 'fail'] : v >= 1.5 ? ['Medium impact', 'warn'] : ['Low impact', 'info'];
 }
 
-export function resultPage(job: Job, r: AuditResult, logo?: string) {
-  const all = r.categories.flatMap((c) => c.checks.map((k) => ({ ...k, catName: c.name })));
+/** Hidden fields so Re-run repeats the same audit options. */
+function rerunFields(job: Job, opts: { businessType?: boolean } = {}) {
+  const mods = job.modules ?? ['ai'];
+  return [
+    `<input type="hidden" name="url" value="${esc(job.url)}">`,
+    `<input type="hidden" name="client" value="${esc(job.client ?? '')}">`,
+    opts.businessType === false ? '' : `<input type="hidden" name="business_type" value="${esc(job.businessType ?? 'auto')}">`,
+    ...mods.map((m) => `<input type="hidden" name="audits" value="${m}">`),
+    job.crawlLimit ? `<input type="hidden" name="pages" value="${job.crawlLimit}">` : '',
+    job.searchData ? '<input type="hidden" name="search" value="on">' : '',
+    job.searchDb ? `<input type="hidden" name="db" value="${esc(job.searchDb)}">` : '',
+  ].join('');
+}
+
+export function resultPage(job: Job, input: AuditResult, logo?: string) {
+  const r = normalizeResult(input);
+  const hasAI = r.modules.includes('ai');
+  const hasSEO = r.modules.includes('seo');
+  const multi = r.scorecards.length > 1;
+  const all = r.scorecards.flatMap((sc) => sc.categories.flatMap((c) => c.checks.map((k) => ({ ...k, module: sc.module, catName: c.name }))));
   const count = (s: Status) => all.filter((c) => c.status === s).length;
-  const catName = (id: string) => r.categories.find((c) => c.id === id)!.name;
+  const catName = (id: string) => r.scorecards.flatMap((sc) => sc.categories).find((c) => c.id === id)?.name ?? '';
   const answerBots = r.bots.filter((b) => b.purpose !== 'training');
 
   const priorities = r.priorities
@@ -457,7 +700,7 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
       <summary>
         <span class="rank">${i + 1}</span>
         <div><h3>${esc(c.title)}</h3>
-          <div class="meta">${badge(impact(c, r))}${c.effort ? `<span class="badge outline">${esc(c.effort)}</span>` : ''}<span class="subtle small">${esc(catName(c.category))}</span></div></div>
+          <div class="meta">${badge(impact(c, r))}${c.effort ? `<span class="badge outline">${esc(c.effort)}</span>` : ''}${c.alsoAffects ? '<span class="badge both">SEO + AI visibility</span>' : multi ? `<span class="badge mod">${MODULE_NAMES[c.module ?? 'ai']}</span>` : ''}<span class="subtle small">${esc(catName(c.category))}</span></div></div>
         <span class="chev" aria-hidden="true">›</span>
       </summary>
       <div class="body">
@@ -471,10 +714,10 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
 
   const checks = all
     .map(
-      (c) => `<div class="check" data-status="${c.status}" data-cat="${c.category}">
+      (c) => `<div class="check" data-status="${c.status}" data-cat="${c.category}" data-module="${c.module}">
       <div>${badge(STATUS[c.status])}</div>
       <div>
-        <h3>${esc(c.title)}<span class="cat-label">${esc(c.catName)}</span></h3>
+        <h3>${esc(c.title)}<span class="cat-label">${multi ? `${MODULE_NAMES[c.module]} · ` : ''}${esc(c.catName)}</span></h3>
         <p>${esc(c.finding)}</p>
         ${c.fix && c.status !== 'pass' ? `<div class="fixline"><b>Fix:</b> ${esc(c.fix)}</div>` : ''}
         ${c.evidence?.length ? `<details><summary>Evidence (${c.evidence.length})</summary><ul>${c.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></details>` : ''}
@@ -561,44 +804,51 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
       <div class="actions" style="margin-top:8px">
         <a class="chip" href="${esc(r.finalUrl)}" target="_blank" rel="noopener">${esc(hostOf(r.finalUrl))} ↗</a>
         <span class="chip">${esc(b.label)}</span>
+        ${r.modules.map((m) => `<span class="chip">${MODULE_NAMES[m]}</span>`).join('')}
         <span class="chip">${esc(fmt(r.auditedAt))}</span>
       </div>
     </div>
     <div class="actions">
       <form method="post" action="/audits" style="display:contents">
-        <input type="hidden" name="url" value="${esc(job.url)}"><input type="hidden" name="client" value="${esc(job.client ?? '')}"><input type="hidden" name="business_type" value="${esc(job.businessType ?? 'auto')}">
-        <button class="btn" type="submit" title="Run this audit again">Re-run</button>
+        ${rerunFields(job)}
+        <button class="btn" type="submit" title="Run this audit again with the same options">Re-run</button>
       </form>
       <a class="btn" href="/audits/${esc(job.id)}/report.html" target="_blank" rel="noopener">Client report ↗</a>
       <a class="btn primary" href="/audits/${esc(job.id)}/report.pdf">Download PDF</a>
     </div>
   </div>
 
-  <section class="overview">
+  ${r.scorecards
+    .map((sc) => {
+      const cs = sc.categories.flatMap((c) => c.checks);
+      const n = (st: Status) => cs.filter((c) => c.status === st).length;
+      return `<section class="overview">
     <div class="card total">
-      <div class="muted small" style="font-weight:600">AI readiness score</div>
-      <div class="big score-num">${r.overall}<small> / 100</small></div>
-      <div class="meter" style="height:8px"><span class="${band(r.overall)}" style="width:${r.overall}%"></span></div>
-      <div style="margin-top:10px;font-weight:600">${esc(r.grade)}</div>
+      <div class="muted small" style="font-weight:600">${sc.module === 'seo' ? 'SEO score' : 'AI readiness score'}</div>
+      <div class="big score-num">${sc.overall}<small> / 100</small></div>
+      <div class="meter" style="height:8px"><span class="${band(sc.overall)}" style="width:${sc.overall}%"></span></div>
+      <div style="margin-top:10px;font-weight:600">${esc(sc.grade)}</div>
       <div class="counts">
-        <span class="badge fail">${count('fail')} to fix</span>
-        <span class="badge warn">${count('warn')} to improve</span>
-        <span class="badge pass">${count('pass')} good</span>
+        <span class="badge fail">${n('fail')} to fix</span>
+        <span class="badge warn">${n('warn')} to improve</span>
+        <span class="badge pass">${n('pass')} good</span>
       </div>
     </div>
     <div class="cats">
-      ${r.categories
+      ${sc.categories
         .map(
           (c) => `<button class="card cat" type="button" data-goto-cat="${c.id}" title="${esc(c.blurb)}">
           <span class="name">${esc(c.name)}</span>
           <span class="score-num">${c.score}</span>
           <div class="meter"><span class="${band(c.score)}" style="width:${c.score}%"></span></div>
-          <span class="hint">${((n) => `${n} ${n === 1 ? 'issue' : 'issues'}`)(c.checks.filter((k) => k.status === 'fail' || k.status === 'warn').length)} · ${c.weight}% of score</span>
+          <span class="hint">${((k) => `${k} ${k === 1 ? 'issue' : 'issues'}`)(c.checks.filter((k) => k.status === 'fail' || k.status === 'warn').length)} · ${c.weight}% of score</span>
         </button>`,
         )
         .join('')}
     </div>
-  </section>
+  </section>`;
+    })
+    .join('')}
 
   <section class="card biz">
     <div>
@@ -606,7 +856,7 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
       <span class="muted small">${b.detected ? `Detected automatically (${esc(b.confidence)} confidence): ${esc(b.reason)}.` : 'Chosen when the audit was started.'}</span>
     </div>
     <form method="post" action="/audits">
-      <input type="hidden" name="url" value="${esc(job.url)}"><input type="hidden" name="client" value="${esc(job.client ?? '')}">
+      ${rerunFields(job, { businessType: false })}
       <label for="rt" class="small muted" style="margin:0;font-weight:500">Wrong type?</label>
       ${businessSelect('business_type', b.id).replace('id="business_type"', 'id="rt"')}
       <button class="btn sm" type="submit">Re-run as this type</button>
@@ -618,8 +868,10 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="priorities">Priorities<span class="count">${r.priorities.length}</span></button>
     <button class="tab" role="tab" data-tab="checks">All checks<span class="count">${all.length}</span></button>
-    <button class="tab" role="tab" data-tab="crawlers">AI crawlers<span class="count">${answerBots.filter((x) => x.robots === 'allowed' && x.live !== 'blocked' && x.live !== 'challenged').length}/${answerBots.length}</span></button>
-    <button class="tab" role="tab" data-tab="pages">Pages<span class="count">${r.pages.length}</span></button>
+    ${hasSEO && r.siteCrawl ? `<button class="tab" role="tab" data-tab="crawl">Site crawl<span class="count">${r.siteCrawl.pagesCrawled}</span></button>` : ''}
+    ${hasSEO && (r.search || r.searchNote) ? `<button class="tab" role="tab" data-tab="search">Search data</button>` : ''}
+    ${hasAI ? `<button class="tab" role="tab" data-tab="crawlers">AI crawlers<span class="count">${answerBots.filter((x) => x.robots === 'allowed' && x.live !== 'blocked' && x.live !== 'challenged').length}/${answerBots.length}</span></button>
+    <button class="tab" role="tab" data-tab="pages">AI vs visitors<span class="count">${r.pages.length}</span></button>` : ''}
   </div>
 
   <section class="panel card" data-panel="priorities">
@@ -634,13 +886,13 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
         <button type="button" data-status="warn" aria-pressed="false">Improve ${count('warn')}</button>
         <button type="button" data-status="pass" aria-pressed="false">Good ${count('pass')}</button>
       </div>
-      <select id="catf" aria-label="Filter by category"><option value="all">All categories</option>${r.categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+      <select id="catf" aria-label="Filter by category"><option value="all">All categories</option>${r.scorecards.map((sc) => `${multi ? `<optgroup label="${sc.name}">` : ''}${sc.categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}${multi ? '</optgroup>' : ''}`).join('')}</select>
     </div>
     <div id="checklist">${checks}</div>
     <div class="empty" id="nochecks" hidden>No checks match these filters.</div>
   </section>
 
-  <section class="panel card" data-panel="crawlers" hidden>
+  ${hasAI ? `<section class="panel card" data-panel="crawlers" hidden>
     <div class="card-head"><p class="muted small" style="max-width:760px">We checked whether <code>robots.txt</code> permits each crawler, then visited the homepage pretending to be it. Search and live-browsing crawlers decide whether AI can cite the site. "Rules only" crawlers never visit; they exist only as robots.txt settings.</p></div>
     <div class="table-scroll"><table>
       <thead><tr><th>Company</th><th>Crawler</th><th>Used for</th><th>robots.txt</th><th>Live test</th></tr></thead>
@@ -652,7 +904,9 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
     <div class="card-head"><p class="muted small">We read each page twice: as the raw HTML most AI crawlers receive, and in a full browser like a visitor. Open a page to compare the two.</p></div>
     <div class="pg-head hide-sm"><span>Page</span><span>AI can read</span><span>Notes</span><span></span></div>
     ${pageRows}
-  </section>
+  </section>` : ''}
+  ${hasSEO && r.siteCrawl ? `<section class="panel" data-panel="crawl" hidden>${crawlPanel(r)}</section>` : ''}
+  ${hasSEO && (r.search || r.searchNote) ? `<section class="panel" data-panel="search" hidden>${searchPanel(r)}</section>` : ''}
 </main>
 <script>
 (function(){
@@ -663,7 +917,7 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
     history.replaceState(null,'','#'+name);
   }
   tabs.forEach(function(t){t.addEventListener('click',function(){show(t.dataset.tab)})});
-  var start=(location.hash||'').slice(1);show(['priorities','checks','crawlers','pages'].indexOf(start)>-1?start:'priorities');
+  var start=(location.hash||'').slice(1);show(tabs.some(function(t){return t.dataset.tab===start})?start:'priorities');
 
   var st='all',cat=document.getElementById('catf');
   function filter(){
@@ -672,6 +926,13 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
   }
   document.querySelectorAll('.seg button').forEach(function(b){b.addEventListener('click',function(){st=b.dataset.status;document.querySelectorAll('.seg button').forEach(function(x){x.setAttribute('aria-pressed',x===b)});filter()})});
   cat.addEventListener('change',filter);
+  var only=document.getElementById('onlyissues'),cq=document.getElementById('crawlq');
+  function crawlFilter(){
+    if(!only)return;var q=cq.value.trim().toLowerCase(),n=0,rows=document.querySelectorAll('#crawlrows tr');
+    rows.forEach(function(tr){var m=(!only.checked||tr.dataset.issues!=='0')&&(!q||tr.dataset.search.indexOf(q)>-1);tr.hidden=!m;if(m)n++});
+    document.getElementById('crawlcount').textContent=n+' of '+rows.length+' pages';
+  }
+  if(only){only.addEventListener('change',crawlFilter);cq.addEventListener('input',crawlFilter);crawlFilter();}
   document.querySelectorAll('[data-goto-cat]').forEach(function(b){b.addEventListener('click',function(){cat.value=b.dataset.gotoCat;st='all';document.querySelectorAll('.seg button').forEach(function(x){x.setAttribute('aria-pressed',x.dataset.status==='all')});filter();show('checks');document.querySelector('.tabs').scrollIntoView({behavior:'smooth'})})});
 })();
 </script>`,

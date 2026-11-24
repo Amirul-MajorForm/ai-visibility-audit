@@ -1,8 +1,9 @@
-# AI Visibility Audit
+# Website Audit: SEO and AI Visibility
 
-Internal MajorForm tool that checks how easily AI assistants (ChatGPT, Claude, Gemini, Perplexity) can find, read and understand a website, and produces a branded client report (HTML + PDF).
+Internal MajorForm tool that audits a website for **SEO**, for **AI visibility** (how easily ChatGPT, Claude, Gemini and Perplexity can find, read and understand it), or both, and produces a branded client report (HTML + PDF).
 
-This is **Layer 1: technical readiness**. Layer 2 (asking the AI models real customer questions and measuring share of voice) is planned.
+- **AI visibility (Layer 1):** AI crawler access, content AI can read without JavaScript, structured data, and whether the site answers what customers ask. Layer 2 (asking the AI models real questions) is planned.
+- **SEO:** a crawl of up to 500 pages, indexing, on-page, site structure, mobile speed and technical checks, plus optional Semrush search data (authority, rankings, competitors, keyword ideas, backlinks) via Apify.
 
 ## Web app
 
@@ -17,7 +18,7 @@ APP_PASSWORD=choose-one npm start     # http://localhost:3000
 
 1. In Railway: **New Project > Deploy from GitHub repo** and pick this repository (and the branch you want to deploy).
    Railway picks up `railway.json` and builds the `Dockerfile` (Playwright's image, which includes Chromium).
-2. **Variables**: add `APP_PASSWORD`. The browser will ask for it (any username works).
+2. **Variables**: add `APP_PASSWORD` (the browser asks for it; any username works). Optionally add `APIFY_TOKEN` and `PAGESPEED_API_KEY` (see below).
 3. **Volume**: add a volume mounted at `/data` so audits survive redeploys. Without it, past reports disappear on every deploy.
 4. **Networking**: click **Generate Domain**.
 5. Recommended: at least 1 GB of memory, since each audit runs a headless browser.
@@ -25,6 +26,8 @@ APP_PASSWORD=choose-one npm start     # http://localhost:3000
 | Variable | Default | Purpose |
 |---|---|---|
 | `APP_PASSWORD` | none | Password for the whole app. Strongly recommended: without it anyone with the URL can run audits. |
+| `APIFY_TOKEN` | none | Enables SEO search data (Semrush via the `pnda/semrush-keyword` Apify actor). Without it the option is greyed out. |
+| `PAGESPEED_API_KEY` | none | Google PageSpeed Insights key for Lighthouse scores and real-user Core Web Vitals. Without it, speed is measured in our own browser. |
 | `DATA_DIR` | `/data` in Docker, `./data` locally | Where audits and reports are stored |
 | `MAX_CONCURRENT_AUDITS` | `1` | Audits run one at a time; extra requests queue |
 | `DNS_CHECK` | on | Set to `off` only behind an outbound proxy where local DNS does not resolve |
@@ -39,14 +42,37 @@ npm run audit -- https://example.sg
 
 | Flag | Purpose |
 |---|---|
+| `--audits ai,seo` | Which audits to run: `ai`, `seo` or both (default both) |
 | `--client "Name"` | Override the client name shown in the report (otherwise taken from the site's structured data or title) |
+| `--type <id>` | Business type instead of detecting it (e.g. `fitness`, `food`, `ecommerce`) |
+| `--pages <n>` | SEO: maximum pages to crawl (default 150) |
+| `--db <country>` | SEO search data country database (default `sg`) |
+| `--no-search` | SEO: skip Semrush search data |
 | `--out <dir>` | Output folder (default `reports/`) |
 | `--no-pdf` | Skip the PDF |
 
 Output goes to `reports/<domain>-<date>/`: `report.json`, `report.html`, `report.pdf`.
 Running outside Docker needs Node 20+ and Playwright's Chromium (`npx playwright install chromium`).
 
-## What it checks
+## SEO audit
+
+One crawl feeds both audits. The SEO audit adds:
+
+| Category | Weight | Checks |
+|---|---|---|
+| Crawling & Indexing | 30 | Broken pages and links, internal links that redirect and redirect chains, noindex (and noindex pages listed in the sitemap), canonical tags, sitemap health, http/www versions redirecting to one address |
+| On-page | 25 | Missing, duplicate, too long or too short titles and meta descriptions across the whole crawl; H1s; thin pages; exact duplicate pages; image alt text |
+| Site Structure | 15 | Clicks from the homepage, sitemap pages nothing links to, weak internal linking, URL format |
+| Speed & Mobile | 20 | Core Web Vitals from Google's real-user data and Lighthouse score (with `PAGESPEED_API_KEY`), otherwise LCP, CLS and page weight measured in our browser on a phone screen; viewport tag |
+| Technical | 10 | HTTPS and mixed content, structured data that can earn rich results, HSTS, language |
+
+The crawler follows internal links from the homepage (no query-string URLs, respects robots.txt), then checks sitemap URLs nothing linked to. Pages behind bot challenges are retried.
+
+**Search data** (optional, needs `APIFY_TOKEN`): runs the `pnda/semrush-keyword` actor in three modes: domain overview (authority score, backlinks, ranking keywords, organic competitors), backlinks, and keyword ideas seeded from what the site says it offers. Each run has a hard spending cap (`maxTotalChargeUsd`), so an audit costs about US$0.20. Results are labelled as Semrush estimates and are **not** part of the score; if the actor fails or hits its daily limit, the audit still completes and says why. The data comes from a community actor that uses Semrush data without a Semrush subscription; review Semrush's terms before relying on it for client work.
+
+**Combined priorities:** checks that are the same fix in both audits (titles, meta descriptions, H1s, sitemap, canonical, HTTPS, structured data, speed, alt text, language) appear once in the priority list, tagged "SEO + AI visibility".
+
+## What the AI visibility audit checks
 
 The score (0 to 100) is a weighted average of five categories:
 

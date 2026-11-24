@@ -1,6 +1,6 @@
-import type { AuditResult, BotResult, Category, Check, Status } from '../types.js';
+import type { AuditResult, BotResult, Category, Check, Scorecard, Status } from '../types.js';
 import { BRAND } from '../brand.js';
-import { impactOf } from '../score.js';
+import { impactOf, impactIn, normalizeResult, MODULE_NAMES } from '../score.js';
 import { embeddedFonts, logoDataUri } from './assets.js';
 
 const C = BRAND.colors;
@@ -59,20 +59,21 @@ function ring(score: number, size: number, stroke: number, track: string, text: 
 
 const pill = (label: string, cls: string) => `<span class="pill ${cls}">${esc(label)}</span>`;
 
-function impactLabel(c: Check, cats: Category[]) {
-  const v = impactOf(c, cats);
+function impactLabel(c: Check, r: AuditResult) {
+  const v = impactIn(c, r);
   return v >= 4 ? ['High impact', 'fail'] : v >= 1.5 ? ['Medium impact', 'warn'] : ['Low impact', 'info'];
 }
 
-function priorityCard(c: Check, i: number, cats: Category[]) {
-  const [imp, impCls] = impactLabel(c, cats);
-  const cat = cats.find((k) => k.id === c.category)!;
+function priorityCard(c: Check, i: number, r: AuditResult) {
+  const [imp, impCls] = impactLabel(c, r);
+  const cat = r.scorecards.flatMap((s) => s.categories).find((k) => k.id === c.category);
+  const scope = c.alsoAffects ? 'SEO + AI visibility' : r.modules.length > 1 ? MODULE_NAMES[c.module ?? 'ai'] : '';
   return `<article class="prio">
     <div class="prio-num">${String(i + 1).padStart(2, '0')}</div>
     <div class="prio-body">
       <div class="prio-head">
         <h3>${esc(c.title)}</h3>
-        <div class="tags">${pill(imp, impCls)}${c.effort ? pill(c.effort, 'neutral') : ''}<span class="cat-tag">${esc(cat.name)}</span></div>
+        <div class="tags">${pill(imp, impCls)}${c.effort ? pill(c.effort, 'neutral') : ''}${scope ? pill(scope, c.alsoAffects ? 'both' : 'scope') : ''}<span class="cat-tag">${esc(cat?.name ?? '')}</span></div>
       </div>
       <dl>
         <dt>What we found</dt><dd>${esc(c.finding)}</dd>
@@ -90,7 +91,7 @@ function checkRow(c: Check) {
     <div class="check-body">
       <h4>${esc(c.title)}</h4>
       <p>${esc(c.finding)}</p>
-      ${c.evidence?.length ? `<ul class="evidence">${c.evidence.slice(0, 6).map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+      ${c.evidence?.length ? `<ul class="evidence">${c.evidence.slice(0, 4).map((e) => `<li>${esc(e.length > 150 ? e.slice(0, 147) + '...' : e)}</li>`).join('')}${c.evidence.length > 4 ? `<li>+ ${c.evidence.length - 4} more</li>` : ''}</ul>` : ''}
     </div>
   </div>`;
 }
@@ -120,7 +121,12 @@ function botTable(bots: BotResult[]) {
   </table>`;
 }
 
-export async function renderReport(r: AuditResult): Promise<string> {
+export async function renderReport(input: AuditResult): Promise<string> {
+  const r = normalizeResult(input);
+  const hasAI = r.modules.includes('ai');
+  const hasSEO = r.modules.includes('seo');
+  const reportTitle = hasAI && hasSEO ? 'Website Audit' : hasSEO ? 'SEO Audit' : 'AI Visibility Audit';
+  const reportSub = hasAI && hasSEO ? 'SEO and AI visibility' : hasSEO ? 'Search engine optimisation' : 'Layer 1: Technical readiness';
   const [fonts, logoLight, logoDark] = await Promise.all([embeddedFonts(), logoDataUri('light'), logoDataUri('dark')]);
   const wordmark = (variant: 'light' | 'dark') => {
     const src = variant === 'light' ? logoLight : logoDark;
@@ -129,20 +135,34 @@ export async function renderReport(r: AuditResult): Promise<string> {
   const date = fmtDate(r.auditedAt);
   const domain = r.host.replace(/^www\./, '');
 
-  const cats = r.categories;
-  const catBars = cats
-    .map(
-      (c) => `<div class="cat">
+  const catBars = (cats: Category[]) =>
+    cats
+      .map(
+        (c) => `<div class="cat">
       <div class="cat-top"><span class="cat-name">${esc(c.name)}</span><span class="cat-score">${c.score}</span></div>
       <div class="bar"><span style="width:${c.score}%;background:${gradeColor(c.score)}"></span></div>
       <div class="cat-blurb">${esc(c.blurb)}</div>
     </div>`,
+      )
+      .join('');
+  const statTiles = (stats: Scorecard['stats']) =>
+    stats.map((s) => `<div class="stat"><div class="stat-val">${esc(s.value)}</div><div class="stat-label">${esc(s.label)}</div><div class="stat-note">${esc(s.note)}</div></div>`).join('');
+  const glance = r.scorecards
+    .map(
+      (sc) => `<div class="glance-block">
+      ${r.scorecards.length > 1 ? `<h3 class="glance-h">${esc(sc.name)}</h3>` : ''}
+      <div class="glance">
+        <div class="glance-score">
+          ${ring(sc.overall, r.scorecards.length > 1 ? 140 : 170, 14, '#e9eaf0', C.ink, sc.module === 'seo' ? 'SEO' : r.scorecards.length > 1 ? 'AI' : 'OVERALL')}
+          <div class="grade">${esc(sc.grade)}</div>
+        </div>
+        <div>${catBars(sc.categories)}</div>
+      </div>
+      <div class="stats">${statTiles(sc.stats)}</div>
+    </div>`,
     )
     .join('');
-
-  const stats = r.stats
-    .map((s) => `<div class="stat"><div class="stat-val">${esc(s.value)}</div><div class="stat-label">${esc(s.label)}</div><div class="stat-note">${esc(s.note)}</div></div>`)
-    .join('');
+  const bands = `<div class="bands-row"><span><i style="background:${C.teal}"></i>85 to 100 Strong</span><span><i style="background:${C.mint}"></i>70 to 84 Good</span><span><i style="background:${C.yellow}"></i>50 to 69 Needs work</span><span><i style="background:${C.coral}"></i>0 to 49 At risk</span></div>`;
 
   // Side-by-side "what AI sees" for the pages where the gap matters most (max 2, to keep the PDF short).
   const ratioOf = (p: (typeof r.pages)[number]) => (p.renderedWords >= 0 ? Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100)) : 101);
@@ -188,6 +208,70 @@ export async function renderReport(r: AuditResult): Promise<string> {
       })
       .join('')}</tbody></table>`;
 
+  // ---------------------------------------------------------------- SEO sections
+  const fmtNum = (n?: number) => (n === undefined || n === null ? '–' : n >= 1000 ? n.toLocaleString('en-SG') : String(n));
+  const sec = (ms?: number) => (ms ? `${(ms / 1000).toFixed(1)}s` : '–');
+  const vital = (v: number | undefined, good: number, poor: number, f: (x: number) => string) =>
+    v === undefined ? '<span class="muted">–</span>' : `<span class="vital ${v <= good ? 'good' : v <= poor ? 'ok' : 'poor'}">${f(v)}</span>`;
+
+  const crawl = r.siteCrawl;
+  const crawlSection = crawl
+    ? (() => {
+        const order = ['200', 'Redirected', '301', '302', '404', '410', '403', '500', 'Error'];
+        const counts = Object.entries(crawl.statusCounts).sort((a, b) => (order.indexOf(a[0]) + 99 * +(order.indexOf(a[0]) < 0)) - (order.indexOf(b[0]) + 99 * +(order.indexOf(b[0]) < 0)));
+        const label = (k: string) => (k === '200' ? 'OK' : k === 'Redirected' ? 'Redirected' : k === 'Error' ? 'No response' : `Error ${k}`);
+        const worst = [...crawl.pages].filter((p) => p.issues.length).sort((a, b) => b.issues.length - a.issues.length).slice(0, 14);
+        return `<div class="crawl-top">
+          <div class="crawl-kpis">
+            <div><b>${crawl.pagesCrawled}</b><span>pages crawled${crawl.limitReached ? ` (limit ${crawl.limit})` : ''}</span></div>
+            <div><b>${crawl.sitemapUrls}</b><span>URLs in sitemap</span></div>
+            <div><b>${crawl.pages.filter((p) => p.issues.length).length}</b><span>pages with issues</span></div>
+          </div>
+          <div class="status-bars">${counts.map(([k, n]) => `<div class="sb"><span class="sb-l">${label(k)}</span><span class="sb-bar"><i class="${k === '200' ? 'ok' : k === 'Redirected' ? 'mid' : 'bad'}" style="width:${Math.max(2, (n / crawl.pagesCrawled) * 100)}%"></i></span><span class="sb-n">${n}</span></div>`).join('')}</div>
+        </div>
+        ${worst.length ? `<h3 class="sub-h">Pages with the most issues</h3>
+        <table class="pages"><thead><tr><th>Page</th><th>Issues</th><th class="num">Words</th><th class="num">Clicks deep</th></tr></thead>
+        <tbody>${worst.map((p) => `<tr><td class="url small">${esc(pathOf(p.url))}</td><td class="small">${p.issues.map((i) => `<span class="issue">${esc(i)}</span>`).join(' ')}</td><td class="num">${p.words || '–'}</td><td class="num">${p.depth ?? 'not linked'}</td></tr>`).join('')}</tbody></table>` : ''}`;
+      })()
+    : '';
+
+  const speedRows = (r.speed ?? []).filter((x) => !x.error);
+  const psi = speedRows.some((x) => x.source === 'pagespeed');
+  const anyField = speedRows.some((x) => x.field);
+  const speedSection = speedRows.length
+    ? `<table class="pages speed"><thead><tr><th>Page</th>${psi ? '<th class="num">Score</th>' : ''}<th class="num">Main content (LCP)</th><th class="num">Layout shift (CLS)</th>${anyField ? '<th class="num">Real users: LCP / INP</th>' : ''}<th class="num">Page weight</th></tr></thead>
+      <tbody>${speedRows.map((x) => `<tr><td><strong>${esc(x.label)}</strong><div class="muted small url">${esc(pathOf(x.url))}</div></td>
+        ${psi ? `<td class="num">${x.performance !== undefined ? vital(100 - x.performance, 10, 50, () => String(x.performance)) : '–'}</td>` : ''}
+        <td class="num">${vital(x.lab.lcpMs, 2500, 4000, sec)}</td>
+        <td class="num">${vital(x.lab.cls, 0.1, 0.25, (v) => v.toFixed(2))}</td>
+        ${anyField ? `<td class="num">${x.field ? `${vital(x.field.lcpMs, 2500, 4000, sec)} / ${vital(x.field.inpMs, 200, 500, (v) => `${Math.round(v)}ms`)}` : '<span class="muted">not enough data</span>'}</td>` : ''}
+        <td class="num">${x.lab.bytes ? `${(x.lab.bytes / 1e6).toFixed(1)} MB` : '–'}</td></tr>`).join('')}</tbody></table>
+      <p class="note">${psi ? 'Measured with Google PageSpeed Insights on a simulated mid-range phone.' : 'Measured in our own browser on a phone-sized screen over a fast connection. Real phones on mobile data are usually slower.'} Good: LCP under 2.5s, CLS under 0.1${anyField ? ', INP under 200ms' : ''}.</p>`
+    : '';
+
+  const sd = r.search;
+  const dbName = (db: string) => ({ sg: 'Singapore', my: 'Malaysia', id: 'Indonesia', th: 'Thailand', ph: 'Philippines', vn: 'Vietnam', hk: 'Hong Kong', au: 'Australia', uk: 'United Kingdom', us: 'United States' } as Record<string, string>)[db] ?? db.toUpperCase();
+  const trafficNonZero = sd?.trafficTrend.some((t) => t.traffic > 0);
+  const maxT = sd ? Math.max(1, ...sd.trafficTrend.map((t) => t.traffic)) : 1;
+  const searchSection = sd
+    ? `<div class="kpi-row">
+        <div class="kpi"><b>${fmtNum(sd.authorityScore)}</b><span>Authority score</span><small>Semrush, 0 to 100</small></div>
+        <div class="kpi"><b>${fmtNum(sd.backlinks)}</b><span>Backlinks</span><small>links from other sites</small></div>
+        <div class="kpi"><b>${sd.topKeywords.length ? fmtNum(sd.topKeywords.filter((k) => (k.position ?? 99) <= 10).length) : '–'}</b><span>Top-10 keywords</span><small>among top keywords shown</small></div>
+        <div class="kpi"><b>${trafficNonZero ? fmtNum(sd.trafficTrend[sd.trafficTrend.length - 1]?.traffic) : '–'}</b><span>Est. monthly organic visits</span><small>${trafficNonZero ? 'latest month' : 'no estimate available'}</small></div>
+      </div>
+      ${trafficNonZero ? `<div class="trend">${sd.trafficTrend.map((t) => `<div class="tb"><i style="height:${Math.max(2, (t.traffic / maxT) * 100)}%"></i><span>${t.month.slice(5)}</span></div>`).join('')}</div>` : ''}
+      <div class="two">
+        <div class="box"><h3>Keywords ${esc(r.clientName)} ranks for</h3>${sd.topKeywords.length ? `<table class="mini"><thead><tr><th>Keyword</th><th class="num">Pos.</th><th class="num">Searches/mo</th></tr></thead><tbody>${sd.topKeywords.slice(0, 10).map((k) => `<tr><td>${esc(k.phrase)}</td><td class="num">${k.position ?? '–'}</td><td class="num">${fmtNum(k.volume)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No ranking keywords found in this database.</p>'}</div>
+        <div class="box"><h3>Organic competitors</h3>${sd.competitors.length ? `<table class="mini"><thead><tr><th>Site</th><th class="num">Shared keywords</th></tr></thead><tbody>${sd.competitors.map((c) => `<tr><td>${esc(c.domain)}</td><td class="num">${fmtNum(c.commonKeywords)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No competitors identified.</p>'}</div>
+      </div>
+      ${sd.keywordIdeas.length ? `<div class="box" style="margin-top:12px"><h3>Keyword opportunities <span class="muted small">related to ${esc(sd.seeds.map((x) => `"${x}"`).join(' and '))}</span></h3><table class="mini"><thead><tr><th>Keyword</th><th class="num">Searches/mo</th><th class="num">Difficulty</th><th class="num">CPC (USD)</th></tr></thead><tbody>${sd.keywordIdeas.slice(0, 12).map((k) => `<tr><td>${esc(k.phrase)}</td><td class="num">${fmtNum(k.volume)}</td><td class="num">${typeof k.difficulty === 'number' ? k.difficulty : '–'}</td><td class="num">${typeof k.cpc === 'number' ? k.cpc.toFixed(2) : '–'}</td></tr>`).join('')}</tbody></table><p class="note">Difficulty is 0 to 100: under 30 is realistic for a smaller site to rank for.</p></div>` : ''}
+      ${sd.topBacklinks.length ? `<div class="box" style="margin-top:12px"><h3>Strongest backlinks</h3><table class="mini"><thead><tr><th>Linking page</th><th>Anchor text</th><th class="num">Authority</th></tr></thead><tbody>${sd.topBacklinks.slice(0, 8).map((b) => `<tr><td class="url">${esc(b.sourceTitle || b.sourceUrl)}<div class="muted small">${esc(new URL(b.sourceUrl).host)}</div></td><td class="small">${esc(b.anchor || '–')}</td><td class="num">${b.authority ?? '–'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <p class="note">Search data: Semrush estimates for the ${esc(dbName(sd.db))} database, for ${esc(sd.domain)}. These are modelled estimates, not your actual Google traffic, and are not part of the score.${sd.notes.length ? ' ' + esc(sd.notes.join(' ')) : ''}</p>`
+    : '';
+
+  let secNo = 0;
+  const nextNum = () => String(++secNo).padStart(2, '0');
   const blockedAny = r.bots.some((b) => b.live === 'blocked' || b.live === 'challenged' || b.robots === 'blocked');
   const robotsBroken = r.bots.every((b) => b.robots === 'unknown');
 
@@ -196,7 +280,7 @@ export async function renderReport(r: AuditResult): Promise<string> {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Visibility Audit: ${esc(r.clientName)}</title>
+<title>${reportTitle}: ${esc(r.clientName)}</title>
 <style>
 ${fonts}
 :root{
@@ -322,6 +406,52 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
 .url{word-break:break-all}
 .ratio{font-family:var(--h);font-weight:600;border-bottom:3px solid var(--c);padding-bottom:1px}
 
+/* Multi-audit layout */
+.keep,.next{break-inside:avoid}
+.cover-scores{display:flex;flex-direction:column;gap:18px;margin-top:16mm}
+.cover-scores .cover-score{margin-top:0}
+.glance-block{margin-bottom:18px;break-inside:avoid}
+.glance-h{font-size:19px;margin:6px 0 10px}
+.bands-row{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--muted);margin:2px 0 8px}
+.bands-row i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.pill.both{background:var(--ink);color:var(--mint)}
+.pill.scope{background:#e4e6ee;color:#3b4852}
+.sc-h{font-size:22px;margin:8px 0 14px;padding-bottom:6px;border-bottom:1px solid var(--line);break-after:avoid}
+.sc-h span{font-size:15px;color:var(--muted);font-weight:500}
+.sub-h{font-size:16px;margin:20px 0 8px;break-after:avoid}
+
+/* Site health */
+.crawl-top{display:grid;grid-template-columns:1fr 1.3fr;gap:16px;background:var(--card);border-radius:14px;padding:16px 18px;break-inside:avoid}
+.crawl-kpis{display:grid;gap:10px}
+.crawl-kpis div{display:flex;align-items:baseline;gap:10px}
+.crawl-kpis b{font-family:var(--h);font-size:26px;min-width:64px}
+.crawl-kpis span{font-size:12.5px;color:var(--muted)}
+.status-bars{display:grid;gap:7px;align-content:center}
+.sb{display:grid;grid-template-columns:96px 1fr 40px;gap:8px;align-items:center;font-size:12px}
+.sb-bar{height:9px;background:#eceef2;border-radius:99px;overflow:hidden}
+.sb-bar i{display:block;height:100%;border-radius:99px}
+.sb-bar i.ok{background:var(--teal)} .sb-bar i.mid{background:var(--yellow)} .sb-bar i.bad{background:var(--coral)}
+.sb-n{text-align:right;font-weight:600}
+.issue{display:inline-block;font-size:10.5px;background:#fdf0d2;color:#6b5300;border-radius:4px;padding:0 5px;margin:1px 0;white-space:nowrap}
+.vital{font-weight:600;padding:1px 6px;border-radius:5px}
+.vital.good{background:#d3efdd;color:#0d4a2c} .vital.ok{background:var(--yellow);color:#5b4a00} .vital.poor{background:#fcd5cc;color:#8a2412}
+table.speed td{vertical-align:middle}
+
+/* Search visibility */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:var(--ink);color:#fff;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column}
+.kpi b{font-family:var(--h);font-size:24px;color:var(--mint);line-height:1.1}
+.kpi span{font-size:12.5px;font-weight:600;margin-top:4px}
+.kpi small{font-size:10.5px;color:#a9bcc4}
+.trend{display:flex;align-items:flex-end;gap:5px;height:90px;background:var(--card);border-radius:12px;padding:10px 14px 22px;margin-bottom:12px}
+.tb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative}
+.tb i{display:block;width:100%;background:var(--teal);border-radius:3px 3px 0 0}
+.tb span{position:absolute;bottom:-17px;font-size:9.5px;color:var(--muted)}
+table.mini{font-size:12px;background:transparent;border-radius:0}
+table.mini th{background:transparent;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line);font-size:10.5px}
+table.mini td{padding:4px 6px}
+.box h3 .small{font-family:var(--b);font-weight:400}
+
 /* AI vs visitor comparison */
 .cmp-intro{break-inside:avoid}
 .cmp-h{font-size:18px;margin:22px 0 4px}
@@ -366,7 +496,8 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   .sheet + .sheet{margin-top:0;border-top:8px solid #e7e8ee}
   .cover{min-height:100vh}
   .cover h1{font-size:38px}
-  .glance,.two,.next,.cmp-grid{grid-template-columns:1fr}
+  .glance,.two,.next,.cmp-grid,.crawl-top{grid-template-columns:1fr}
+  .kpi-row{grid-template-columns:1fr 1fr}
   .stats,.legend{grid-template-columns:1fr 1fr}
   dl{grid-template-columns:1fr}
   table{display:block;overflow-x:auto}
@@ -380,51 +511,42 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
   <div class="cover-top">${wordmark('light')}<span class="conf">Confidential · Prepared for ${esc(r.clientName)}</span></div>
   <div class="cover-main">
-    <div class="kicker">AI Visibility Audit</div>
+    <div class="kicker">${reportTitle}${hasAI && hasSEO ? ': SEO and AI visibility' : ''}</div>
     <h1>${esc(r.clientName)}</h1>
     <div class="domain">${esc(domain)} · ${esc(r.business.label)}</div>
-    <div class="cover-score">
-      ${ring(r.overall, 150, 13, 'rgba(255,255,255,.14)', '#ffffff', 'OUT OF 100')}
-      <div>
-        <div class="label">AI readiness score</div>
-        <div class="grade">${esc(r.grade)}</div>
-        <div class="gnote">How easily ChatGPT, Claude, Gemini and Perplexity can find, read and understand this website.</div>
-      </div>
+    <div class="cover-scores">
+      ${r.scorecards
+        .map(
+          (sc) => `<div class="cover-score">
+        ${ring(sc.overall, r.scorecards.length > 1 ? 128 : 150, 12, 'rgba(255,255,255,.14)', '#ffffff', 'OUT OF 100')}
+        <div>
+          <div class="label">${sc.module === 'seo' ? 'SEO score' : 'AI readiness score'}</div>
+          <div class="grade">${esc(sc.grade)}</div>
+          <div class="gnote">${sc.module === 'seo' ? 'How well search engines can crawl, index and rank this website.' : 'How easily ChatGPT, Claude, Gemini and Perplexity can find, read and understand this website.'}</div>
+        </div>
+      </div>`,
+        )
+        .join('')}
     </div>
   </div>
   <div class="cover-foot">
     <div>Prepared by <strong>${esc(BRAND.name)}</strong><br>${esc(BRAND.website)}</div>
-    <div style="text-align:right">${esc(date)}<br>Layer 1: Technical readiness</div>
+    <div style="text-align:right">${esc(date)}<br>${reportSub}</div>
   </div>
 </section>
 
-<section class="sheet">
-  <div class="sec-head"><h2>At a glance</h2><span class="sec-num">01 · Summary</span></div>
+<section class="sheet flow">
+  <div class="sec-head"><h2>At a glance</h2><span class="sec-num">${nextNum()} · Summary</span></div>
   <p class="lede">${esc(r.summary)}</p>
-  <div class="glance">
-    <div class="glance-score">
-      ${ring(r.overall, 170, 15, '#e9eaf0', C.ink, 'OVERALL')}
-      <div class="grade">${esc(r.grade)}</div>
-      <div class="bands">
-        <div><span style="background:${C.teal}"></span>85 to 100 · Strong</div>
-        <div><span style="background:${C.mint}"></span>70 to 84 · Good</div>
-        <div><span style="background:${C.yellow}"></span>50 to 69 · Needs work</div>
-        <div><span style="background:${C.coral}"></span>0 to 49 · At risk</div>
-      </div>
-    </div>
-    <div>${catBars}</div>
-  </div>
-  <div class="stats">${stats}</div>
-  ${
-    r.priorities.length
-      ? `<div class="callout"><strong>Start here:</strong> ${esc(r.priorities[0].title)}. ${esc(r.priorities[0].fix)}</div>`
-      : ''
-  }
-  <div class="running"><span><b>${esc(BRAND.name)}</b> · AI Visibility Audit</span><span>${esc(r.clientName)} · ${esc(date)}</span></div>
+  ${glance}
+  ${bands}
+  ${r.priorities.length ? `<div class="callout"><strong>Start here:</strong> ${esc(r.priorities[0].title)}. ${esc(r.priorities[0].fix)}</div>` : ''}
 </section>
 
-<section class="sheet">
-  <div class="sec-head"><h2>Can AI assistants get in?</h2><span class="sec-num">02 · Crawler access</span></div>
+${
+  hasAI
+    ? `<section class="sheet">
+  <div class="sec-head"><h2>Can AI assistants get in?</h2><span class="sec-num">${nextNum()} · Crawler access</span></div>
   <p class="lede">Every AI assistant sends automated "crawlers" to read websites. We checked two things for each one: whether your <code>robots.txt</code> file permits it, and whether your server actually lets it through when it visits.</p>
   <div class="legend">
     <div><b>Search index</b>Builds the index an assistant searches when answering. Blocked means you are not cited.</div>
@@ -433,58 +555,94 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   </div>
   <p class="note" style="margin:0 0 12px">${robotsBroken ? 'robots.txt could not be read, so permissions are shown as "Unreadable". ' : ''}"Rules only" crawlers never visit sites; they exist only as robots.txt settings. Live tests imitate each crawler from our servers. Some firewalls treat imitations differently from the real crawler${blockedAny ? ', so confirm any blocks in your CDN or firewall settings' : ''}.</p>
   ${botTable(r.bots)}
-  <div class="running"><span><b>${esc(BRAND.name)}</b> · AI Visibility Audit</span><span>${esc(r.clientName)} · ${esc(date)}</span></div>
-</section>
+</section>`
+    : ''
+}
 
 <section class="sheet flow">
-  <div class="sec-head"><h2>Top priorities</h2><span class="sec-num">03 · Action plan</span></div>
-  <p class="lede">These fixes are ranked by how much each would improve the score. Quick wins can usually be done in an afternoon; others need a web developer.</p>
-  ${r.priorities.map((c, i) => priorityCard(c, i, cats)).join('')}
+  <div class="sec-head"><h2>Top priorities</h2><span class="sec-num">${nextNum()} · Action plan</span></div>
+  <p class="lede">These fixes are ranked by how much each would improve the score${r.modules.length > 1 ? 's. Where one fix helps both SEO and AI visibility, it appears once' : ''}. Quick wins can usually be done in an afternoon; others need a web developer.</p>
+  ${r.priorities.map((c, i) => priorityCard(c, i, r)).join('')}
 </section>
 
+${
+  hasSEO && (crawlSection || speedSection)
+    ? `<section class="sheet flow">
+  <div class="sec-head"><h2>Site health</h2><span class="sec-num">${nextNum()} · SEO crawl</span></div>
+  <p class="lede">We crawled the site the way Google does, following internal links from the homepage and checking every page in the sitemap.</p>
+  ${crawlSection}
+  ${speedSection ? `<div class="keep"><h3 class="sub-h">Speed on mobile</h3>${speedSection}</div>` : ''}
+</section>`
+    : ''
+}
+
+${
+  hasSEO && (sd || r.searchNote)
+    ? `<section class="sheet flow">
+  <div class="sec-head"><h2>Search visibility</h2><span class="sec-num">${nextNum()} · Rankings and links</span></div>
+  ${sd ? searchSection : `<p class="lede">${esc(r.searchNote)}</p>`}
+</section>`
+    : ''
+}
+
 <section class="sheet flow">
-  <div class="sec-head"><h2>Detailed findings</h2><span class="sec-num">04 · All checks</span></div>
-  ${cats
+  <div class="sec-head"><h2>Detailed findings</h2><span class="sec-num">${nextNum()} · All checks</span></div>
+  ${r.scorecards
     .map(
-      (c) => `<div class="cat-block">
+      (sc) => `${r.scorecards.length > 1 ? `<h3 class="sc-h">${esc(sc.name)} <span>${sc.overall}/100</span></h3>` : ''}${sc.categories
+        .map(
+          (c) => `<div class="cat-block">
       <div class="cat-block-head">${ring(c.score, 54, 6, '#e1e3ea', C.ink)}<div><h3>${esc(c.name)}</h3><p>${esc(c.blurb)}</p></div></div>
       <div class="checks">${c.checks.map(checkRow).join('')}</div>
     </div>`,
+        )
+        .join('')}`,
     )
     .join('')}
 </section>
 
 <section class="sheet flow">
-  <div class="sec-head"><h2>Pages reviewed</h2><span class="sec-num">05 · Coverage</span></div>
-  <p class="lede">We read each page twice: once as raw HTML (what most AI crawlers see) and once in a full browser (what a visitor sees). The gap between the two is content AI may miss.</p>
+  ${
+    hasAI
+      ? `<div class="sec-head"><h2>Pages reviewed</h2><span class="sec-num">${nextNum()} · AI coverage</span></div>
+  <p class="lede">We read each key page twice: once as raw HTML (what most AI crawlers see) and once in a full browser (what a visitor sees). The gap between the two is content AI may miss.</p>
   ${pagesTable}
   ${compareBoxes ? `<div class="cmp-intro"><h3 class="cmp-h">What AI sees vs what visitors see</h3><p class="cmp-lede">The pages with the biggest gap. On the left is the text in the HTML your server sends, which is all most AI crawlers read. On the right is text that only appears after JavaScript runs.</p>${compareBoxes}` : ''}
-
-  <div class="sec-head" style="margin-top:28px"><h2>About this audit</h2><span class="sec-num">06 · Method</span></div>
+  <div style="height:28px"></div>`
+      : ''
+  }
+  <div class="sec-head"><h2>About this audit</h2><span class="sec-num">${nextNum()} · Method</span></div>
   <div class="two">
     <div class="box"><h3>What we checked</h3><ul>
-      <li>Access rules and live access for ${r.bots.length} AI and search crawlers</li>
-      <li>How much content is readable without JavaScript</li>
+      ${hasAI ? `<li>Access rules and live access for ${r.bots.length} AI and search crawlers</li>
+      <li>How much content AI can read without running JavaScript</li>
       <li>Structured data describing the business, offers and FAQs</li>
-      <li>Whether the site answers what customers ask: location, prices, hours, contact</li>
-      <li>Sitemap, indexing, canonical tags and server speed</li>
+      <li>Whether the site answers what customers ask: location, prices, hours, contact</li>` : ''}
+      ${hasSEO ? `<li>A crawl of ${r.siteCrawl?.pagesCrawled ?? 0} pages: errors, redirects, indexing, canonicals and sitemap</li>
+      <li>Titles, descriptions, headings, thin and duplicate pages across the whole crawl</li>
+      <li>Site structure, mobile speed and technical basics</li>
+      ${r.search ? '<li>Search visibility estimates from Semrush</li>' : ''}` : ''}
     </ul></div>
     <div class="box"><h3>Good to know</h3><ul>
       <li>We assessed the site as <strong>${esc(r.business.label)}</strong> (${r.business.detected ? esc(r.business.reason) : 'chosen by the auditor'}), which decides which pages and details we expect.</li>
-      <li>This is a point-in-time technical check of ${r.pages.length} key pages, run on ${esc(date)}.</li>
-      <li>A strong score means AI <em>can</em> read the site. It does not guarantee AI will recommend it.</li>
-      <li>Off-site signals (Google reviews, directories, press, Reddit) also shape AI answers and are not scored here.</li>
+      <li>This is a point-in-time technical check, run on ${esc(date)}.</li>
+      ${hasAI ? '<li>A strong AI score means AI <em>can</em> read the site. It does not guarantee AI will recommend it.</li>' : ''}
+      ${hasSEO ? '<li>Google rankings also depend on backlinks, competition and content quality, which a technical audit can only partly measure.</li>' : ''}
       <li>Speed is measured from our test servers and may differ for local visitors.</li>
     </ul></div>
   </div>
-  <div class="next">
+  ${
+    hasAI
+      ? `<div class="next">
     <div>
       <div class="kicker">Next step · Layer 2</div>
       <h3>Is AI actually recommending you?</h3>
       <p>The next stage of this audit puts real customer questions to ChatGPT, Claude and Gemini, ${r.business.query ? `such as "${esc(r.business.query)}", ` : 'the kind your customers ask, '}and measures how often ${esc(r.clientName)} is mentioned against competitors.</p>
     </div>
     <div class="cta">Talk to ${esc(BRAND.name)}</div>
-  </div>
+  </div>`
+      : ''
+  }
 </section>
 
 </body>

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { runAudit } from '../audit.js';
+import type { ModuleId } from '../types.js';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
@@ -12,6 +13,11 @@ export interface Job {
   client?: string;
   /** Profile id or 'auto' */
   businessType?: string;
+  /** Audits requested (missing on old jobs = AI only) */
+  modules?: ModuleId[];
+  crawlLimit?: number;
+  searchData?: boolean;
+  searchDb?: string;
   status: JobStatus;
   createdAt: string;
   finishedAt?: string;
@@ -23,6 +29,16 @@ export interface Job {
   overall?: number;
   grade?: string;
   businessLabel?: string;
+  scores?: Partial<Record<ModuleId, number>>;
+}
+
+export interface JobOptions {
+  client?: string;
+  businessType?: string;
+  modules: ModuleId[];
+  crawlLimit?: number;
+  searchData?: boolean;
+  searchDb?: string;
 }
 
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
@@ -66,10 +82,10 @@ export function queuePosition(id: string) {
   return queue.indexOf(id) + 1;
 }
 
-export async function createJob(url: string, client?: string, businessType = 'auto'): Promise<Job> {
+export async function createJob(url: string, o: JobOptions): Promise<Job> {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const id = `${stamp}-${randomBytes(4).toString('hex')}`;
-  const job: Job = { id, url, client: client?.trim() || undefined, businessType, status: 'queued', createdAt: new Date().toISOString(), log: [] };
+  const job: Job = { id, url, client: o.client?.trim() || undefined, businessType: o.businessType ?? 'auto', modules: o.modules, crawlLimit: o.crawlLimit, searchData: o.searchData, searchDb: o.searchDb, status: 'queued', createdAt: new Date().toISOString(), log: [] };
   jobs.set(id, job);
   await mkdir(jobDir(id), { recursive: true });
   await save(job);
@@ -97,8 +113,9 @@ async function run(job: Job) {
   };
   await save(job);
   try {
-    const { result } = await runAudit(job.url, { client: job.client, businessType: job.businessType, dir: jobDir(job.id) }, log);
-    Object.assign(job, { status: 'done', clientName: result.clientName, host: result.host, overall: result.overall, grade: result.grade, businessLabel: result.business.label });
+    const { result } = await runAudit(job.url, { client: job.client, businessType: job.businessType, modules: job.modules ?? ['ai'], crawlLimit: job.crawlLimit, searchData: job.searchData, searchDb: job.searchDb, dir: jobDir(job.id) }, log);
+    const scores = Object.fromEntries(result.scorecards.map((s) => [s.module, s.overall]));
+    Object.assign(job, { status: 'done', clientName: result.clientName, host: result.host, overall: result.scorecards[0].overall, grade: result.scorecards[0].grade, scores, businessLabel: result.business.label });
     log('Done');
   } catch (e: any) {
     job.status = 'failed';

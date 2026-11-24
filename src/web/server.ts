@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createReadStream, existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { profileById } from '../profiles.js';
+import { searchDataAvailable, SEARCH_DBS } from '../seo/search.js';
+import type { ModuleId } from '../types.js';
 import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { initJobs, createJob, getJob, listJobs, queuePosition, jobDir } from './jobs.js';
@@ -58,11 +60,11 @@ const server = createServer(async (req, res) => {
 
   if (p === '/healthz') return send(res, 200, 'ok', 'text/plain');
   if (!authorised(req)) {
-    return send(res, 401, 'Password required', 'text/plain', { 'www-authenticate': 'Basic realm="AI Visibility Audit", charset="UTF-8"' });
+    return send(res, 401, 'Password required', 'text/plain', { 'www-authenticate': 'Basic realm="Website Audit", charset="UTF-8"' });
   }
 
   try {
-    if (req.method === 'GET' && p === '/') return send(res, 200, homePage(listJobs(), { logo }));
+    if (req.method === 'GET' && p === '/') return send(res, 200, homePage(listJobs(), { logo, searchAvailable: searchDataAvailable() }));
 
     if (req.method === 'POST' && p === '/audits') {
       const form = await readForm(req);
@@ -70,9 +72,17 @@ const server = createServer(async (req, res) => {
       const client = (form.get('client') ?? '').slice(0, 120);
       const bt = form.get('business_type') ?? 'auto';
       const businessType = bt === 'auto' || profileById(bt) ? bt : 'auto';
+      const modules = [...new Set(form.getAll('audits'))].filter((m): m is ModuleId => m === 'ai' || m === 'seo');
+      const pages = Number(form.get('pages'));
+      const crawlLimit = [50, 150, 300, 500].includes(pages) ? pages : 150;
+      const searchData = modules.includes('seo') && form.get('search') === 'on' && searchDataAvailable();
+      const dbIn = form.get('db') ?? 'sg';
+      const searchDb = SEARCH_DBS.some((d) => d.id === dbIn) ? dbIn : 'sg';
+      const back = { url: input, client, businessType, modules, crawlLimit, searchData, searchDb, logo, searchAvailable: searchDataAvailable() };
+      if (!modules.length) return send(res, 400, homePage(listJobs(), { ...back, error: 'Choose at least one audit: AI visibility, SEO or both.' }));
       const v = await validateTarget(input);
-      if (!v.ok) return send(res, 400, homePage(listJobs(), { error: v.error, url: input, client, businessType, logo }));
-      const job = await createJob(v.url, client, businessType);
+      if (!v.ok) return send(res, 400, homePage(listJobs(), { ...back, error: v.error }));
+      const job = await createJob(v.url, { client, businessType, modules, crawlLimit: modules.includes('seo') ? crawlLimit : undefined, searchData, searchDb });
       res.writeHead(303, { location: `/audits/${job.id}` });
       return res.end();
     }
@@ -113,4 +123,4 @@ const server = createServer(async (req, res) => {
 
 await initJobs();
 logo = await logoDataUri('light');
-server.listen(PORT, () => console.log(`AI Visibility Audit running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Website Audit running on http://localhost:${PORT}`));

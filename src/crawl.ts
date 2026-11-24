@@ -36,7 +36,7 @@ export interface Ctx {
   sitemapsInRobots: string[];
   bots: BotResult[];
   pages: AnalyzedPage[];
-  sitemap: { found: boolean; url?: string; urlCount: number; listedInRobots: boolean };
+  sitemap: { found: boolean; url?: string; urlCount: number; listedInRobots: boolean; urls: string[] };
   llmsTxt: { found: boolean; url: string };
   detection: Detection;
   profile: Profile;
@@ -50,6 +50,8 @@ export interface Ctx {
 export interface CrawlOptions {
   /** Profile id to force, or undefined / 'auto' to detect. */
   businessType?: string;
+  /** Skip the live AI crawler tests when only SEO was requested. */
+  skipBotTests?: boolean;
 }
 
 const SKIP = /\.(pdf|jpe?g|png|webp|gif|svg|mp4|zip|docx?)$|\/wp-(content|admin|json)|\/cdn-cgi\/|\/(feed|tag|author|category|blog|news|cart|checkout|my-account|login|privacy|terms)\b|\/\d{4}\/\d{2}\/|\?/i;
@@ -134,18 +136,20 @@ async function liveBotTest(url: string, browserWords: number): Promise<Map<strin
 
 async function findSitemap(origin: string, fromRobots: string[]) {
   const tries = [...fromRobots, `${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`, `${origin}/wp-sitemap.xml`];
+  const locs = (xml: string) => [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\s\]]+)/gi)].map((m) => m[1].replace(/&amp;/g, '&'));
   for (const url of [...new Set(tries)]) {
     const r = await get(url, { accept: 'application/xml,text/xml;q=0.9,*/*;q=0.5' });
     if (r.status !== 200 || !/<(urlset|sitemapindex)/i.test(r.body)) continue;
-    let urlCount = 0;
+    let urls: string[] = [];
     if (/<sitemapindex/i.test(r.body)) {
-      const children = [...r.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]).slice(0, 10);
+      const children = locs(r.body).slice(0, 25);
       const subs = await Promise.all(children.map((c) => get(c, { accept: 'application/xml,*/*' })));
-      urlCount = subs.reduce((n, s) => n + (s.body.match(/<url>/gi)?.length ?? 0), 0);
-    } else urlCount = r.body.match(/<url>/gi)?.length ?? 0;
-    return { found: true, url: r.finalUrl, urlCount, listedInRobots: fromRobots.length > 0 };
+      urls = subs.flatMap((x) => (/<urlset/i.test(x.body) ? locs(x.body) : []));
+    } else urls = locs(r.body);
+    urls = [...new Set(urls)].slice(0, 5000);
+    return { found: true, url: r.finalUrl, urlCount: urls.length, listedInRobots: fromRobots.length > 0, urls };
   }
-  return { found: false, urlCount: 0, listedInRobots: fromRobots.length > 0 };
+  return { found: false, urlCount: 0, listedInRobots: fromRobots.length > 0, urls: [] as string[] };
 }
 
 export async function crawl(inputUrl: string, log: (s: string) => void, opts: CrawlOptions = {}): Promise<Ctx> {
@@ -239,8 +243,8 @@ export async function crawl(inputUrl: string, log: (s: string) => void, opts: Cr
     }
   });
 
-  log('Testing access as each AI crawler');
-  const live = await liveBotTest(home.finalUrl, pages[0].raw.words);
+  if (!opts.skipBotTests) log('Testing access as each AI crawler');
+  const live = opts.skipBotTests ? new Map<string, { live: BotResult['live']; detail: string }>() : await liveBotTest(home.finalUrl, pages[0].raw.words);
   const testUrls = pages.map((p) => p.url);
   const bots: BotResult[] = BOTS.map((b) => {
     let state: BotResult['robots'] = 'allowed';
