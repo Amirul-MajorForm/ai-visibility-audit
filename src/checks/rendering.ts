@@ -3,6 +3,7 @@ import type { Ctx } from '../crawl.js';
 import type { Facts } from '../page.js';
 import { mk, pct, path, list } from './util.js';
 import { widgetKind, WIDGET_KIND_LABEL } from '../widgets.js';
+import { askedLike } from '../examples.js';
 
 export const FACT_LABELS: Record<keyof Facts, string> = {
   price: 'prices', hours: 'opening hours or times', phone: 'phone number', postal: 'address', email: 'email address',
@@ -56,7 +57,7 @@ export function renderingChecks(ctx: Ctx): Check[] {
     why: invisible.length ? 'These are exactly the details people ask AI about: "how much does X cost", "where is X", "how do I contact X".' : undefined,
     fix: invisible.length
       ? [onlyEmail ? '' : 'Put prices, address and opening hours in plain text on the page, not only inside sliders, tabs or embedded widgets.',
-         invisible.includes('email') && cfEmail ? 'For the email: either turn off Email Address Obfuscation in Cloudflare (Scrape Shield), or accept the trade-off and make sure phone and WhatsApp are in plain text.' : ''].filter(Boolean).join(' ')
+         invisible.includes('email') && cfEmail ? 'For the email: either turn off Email Address Obfuscation in Cloudflare (Scrape Shield), or accept the trade-off and make sure your phone number is in plain text.' : ''].filter(Boolean).join(' ')
       : undefined,
     effort: invisible.length ? (onlyEmail ? 'Quick win' : 'Moderate') : undefined,
     evidence: hidden.map((h) => `${path(h.p.url)}: ${FACT_LABELS[h.k]} only after JavaScript`) }));
@@ -70,7 +71,7 @@ export function renderingChecks(ctx: Ctx): Check[] {
     const textual = (hasHoursText ? 1 : 0) + (hasPriceText ? 1 : 0);
     checks.push(mk({ id: 'booking-widget', category: 'rendering', title: 'Booking and third-party widgets', weight: 2, score: textual === 2 ? 0.9 : textual === 1 ? 0.65 : 0.4,
       finding: `Your ${what} runs on ${list(widgets)}, which loads inside a JavaScript widget that AI crawlers cannot read. ${textual === 2 ? 'Times and prices also appear in plain text, which helps.' : textual === 1 ? 'Some details also appear in plain text, but not all of what the widget shows.' : 'There is no plain-text version of what the widget shows (availability, times, prices).'}`,
-      why: `People ask AI things like "${ctx.profile.query}". AI can only use details that exist as readable text on your pages.`,
+      why: `When people ask AI ${askedLike(ctx.examples!)}, it can only use details that exist as readable text on your pages.`,
       fix: 'Keep the widget, but add a short plain-text summary next to it: what can be booked or ordered, typical availability or hours, starting prices and how to book.',
       effort: 'Moderate' }));
   } else {

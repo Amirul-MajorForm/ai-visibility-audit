@@ -6,6 +6,8 @@ import { parsePage, type PageInfo } from './page.js';
 import { withBrowser } from './render.js';
 import { detectWidgets } from './widgets.js';
 import type { BotResult } from './types.js';
+import type { Examples } from './examples.js';
+import { detectPlatform, type Platform } from './platform.js';
 import { PAGE_KINDS, detectProfile, profileById, type Detection, type PageKind, type Profile } from './profiles.js';
 
 export interface AnalyzedPage {
@@ -38,6 +40,9 @@ export interface Ctx {
   profile: Profile;
   /** Every time a plain fetch got a challenge or loading page instead of content. */
   challenges: { url: string; title: string; recovered: boolean }[];
+  platform: Platform;
+  /** Site-specific example wording, filled in before checks run (see score.ts). */
+  examples?: Examples;
 }
 
 export interface CrawlOptions {
@@ -195,7 +200,9 @@ export async function crawl(inputUrl: string, log: (s: string) => void, opts: Cr
     const ecommerceSignals =
       (/cdn\.shopify\.com|bigcommerce\.com|shopline/i.test(home.body) ? 2 : 0) +
       (/\badd to (cart|bag|basket)\b/i.test(h.text) ? 2 : 0) +
-      (homeRaw.schemaTypes.some((t) => ['Product', 'ProductGroup', 'OnlineStore'].includes(t)) ? 1 : 0);
+      (homeRaw.schemaTypes.some((t) => ['Product', 'ProductGroup', 'OnlineStore'].includes(t)) ? 1 : 0) +
+      (/^(shop|store|order|buy)\./i.test(new URL(home.finalUrl).hostname) ? 2 : 0) +
+      ([...(homeRenderedInfo?.links ?? []), ...homeRaw.links].some((l) => /\/(products?|collections?|cart|checkout|basket)(\/|$)/i.test(l.href)) ? 2 : 0);
     detection = forced
       ? { profile: forced, detected: false, confidence: 'high', reason: 'chosen when the audit was started' }
       : detectProfile({ jsonLd: homeRaw.jsonLd, title: h.title, description: h.metaDescription, headings: [...h.h1, ...h.h2], body: h.text, ecommerceSignals: Math.min(ecommerceSignals, 3) });
@@ -246,5 +253,5 @@ export async function crawl(inputUrl: string, log: (s: string) => void, opts: Cr
   const llms = await get(`${origin}/llms.txt`, { accept: 'text/plain,*/*' });
   const llmsTxt = { found: llms.status === 200 && !/^\s*</.test(llms.body) && llms.body.trim().length > 0, url: `${origin}/llms.txt` };
 
-  return { challenges, inputUrl: start, origin, host, home, robots, robotsState, robotsProblem, sitemapsInRobots, bots, pages, sitemap, llmsTxt, detection, profile: detection.profile };
+  return { platform: detectPlatform(home), challenges, inputUrl: start, origin, host, home, robots, robotsState, robotsProblem, sitemapsInRobots, bots, pages, sitemap, llmsTxt, detection, profile: detection.profile };
 }

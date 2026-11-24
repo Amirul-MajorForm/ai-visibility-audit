@@ -436,7 +436,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
     <div>
       <div class="kicker">Next step · Layer 2</div>
       <h3>Is AI actually recommending you?</h3>
-      <p>The next stage of this audit puts real customer questions to ChatGPT, Claude and Gemini, such as "${esc(r.business.query)}", and measures how often ${esc(r.clientName)} is mentioned against competitors.</p>
+      <p>The next stage of this audit puts real customer questions to ChatGPT, Claude and Gemini, ${r.business.query ? `such as "${esc(r.business.query)}", ` : 'the kind your customers ask, '}and measures how often ${esc(r.clientName)} is mentioned against competitors.</p>
     </div>
     <div class="cta">Talk to ${esc(BRAND.name)}</div>
   </div>

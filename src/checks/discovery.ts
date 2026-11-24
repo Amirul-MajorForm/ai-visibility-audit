@@ -40,7 +40,7 @@ export function discoveryChecks(ctx: Ctx): Check[] {
   const ttfb = home.fetch.ttfbMs;
   checks.push(mk({ id: 'speed', category: 'discovery', title: 'Server response time', weight: 1.5, score: ttfb <= 800 ? 1 : ttfb <= 1800 ? 0.6 : 0.2,
     finding: `Your server took ${(ttfb / 1000).toFixed(2)}s to start responding.${ttfb > 800 ? ' AI crawlers work to tight time limits and may give up on slow pages.' : ''}`,
-    fix: ttfb > 800 ? 'Enable page caching (e.g. a caching plugin or Cloudflare cache) and review hosting performance.' : undefined,
+    fix: ttfb > 800 ? `Enable page caching${ctx.platform.cms === 'WordPress' ? ' (a WordPress caching plugin)' : ''}${ctx.platform.cdn ? ` and ${ctx.platform.cdn} caching for pages` : ' or a CDN'}, and review hosting performance.` : undefined,
     effort: ttfb > 800 ? 'Moderate' : undefined }));
 
   const og = home.raw.og;

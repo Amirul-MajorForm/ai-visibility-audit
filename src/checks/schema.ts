@@ -4,6 +4,7 @@ import type { Profile } from '../profiles.js';
 import { PROFILES } from '../profiles.js';
 import { flattenLd, typesOf } from '../page.js';
 import { mk, list } from './util.js';
+import { askedLike } from '../examples.js';
 
 const GENERIC = ['Organization', 'Corporation', 'LocalBusiness', 'Store'];
 /** Every specific business type any profile knows about, plus generic LocalBusiness-style types. */
@@ -53,7 +54,7 @@ export function fieldsFor(p: Profile): Field[] {
 
 const OFFER_FIX: Record<string, string> = {
   food: 'Add a Menu (with MenuItem prices) or link your menu with the hasMenu property on your Restaurant structured data.',
-  ecommerce: 'Make sure every product page has Product structured data with price, currency (SGD) and availability. Most Shopify and WooCommerce themes can do this; check it is switched on.',
+  ecommerce: 'Make sure every product page has Product structured data with price, currency (SGD) and availability. Most e-commerce platforms can add this automatically; check it is switched on.',
   retail: 'Add Product structured data with prices for your main products, or an OfferCatalog listing your ranges.',
   saas: 'Add SoftwareApplication structured data with your plans as Offers (price and currency), plus a link to your pricing page.',
   hospitality: 'Add HotelRoom and Offer structured data for your room types with nightly rates.',
@@ -71,7 +72,7 @@ export function schemaChecks(ctx: Ctx): Check[] {
       ? `Found structured data describing: ${list(types.slice(0, 8))}.${errors ? ` ${errors} block(s) contain errors and will be ignored.` : ''}`
       : 'No structured data (schema.org) found.',
     why: nodes.length && !errors ? undefined : 'Structured data is a machine-readable fact sheet about your business. AI systems and Google use it to confirm who you are, what you offer and how to reach you.',
-    fix: nodes.length && !errors ? undefined : errors ? 'Fix the invalid JSON-LD blocks (test with Google\'s Rich Results Test).' : 'Add JSON-LD structured data. Most website platforms and SEO plugins (Yoast, Rank Math, Shopify apps) can do the basics.',
+    fix: nodes.length && !errors ? undefined : errors ? 'Fix the invalid JSON-LD blocks (test with Google\'s Rich Results Test).' : `Add JSON-LD structured data.${ctx.platform.cms === 'WordPress' ? ' An SEO plugin such as Yoast or Rank Math can do the basics.' : ctx.platform.cms ? ` ${ctx.platform.cms} or an SEO app for it can do the basics.` : ' Most website platforms and SEO tools can do the basics.'}`,
     effort: nodes.length && !errors ? undefined : 'Moderate' }));
 
   const biz = businessNode(ctx);
@@ -90,7 +91,7 @@ export function schemaChecks(ctx: Ctx): Check[] {
         : isOrg
           ? `Your business is only described as a generic ${list(bizTypes)}.${profile.physical ? ' Nothing tells machines what kind of business it is or that it has a physical location.' : ''}`
           : 'There is no structured data describing your business at all.',
-    why: score >= 0.8 ? undefined : `A specific business type links your name to a category${profile.physical ? ' and a location' : ''}. That is what AI uses to recommend you for questions like "${profile.query}".`,
+    why: score >= 0.8 ? undefined : `A specific business type links your name to a category${profile.physical ? ' and a location' : ''}. That is what AI uses to recommend you for ${askedLike(ctx.examples!)}.`,
     fix: score >= 0.8 ? undefined : `Add ${recommended} structured data${profile.physical ? ' for each location, including address, opening hours and phone' : ' with your logo, description, contact details and social profiles'}.`,
     effort: score >= 0.8 ? undefined : 'Moderate' }));
 
@@ -111,7 +112,7 @@ export function schemaChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'offer-schema', category: 'schema', title: 'What you offer, in structured data', weight: 1.5, score: offerOk ? 1 : 0,
     finding: offerOk ? `Your ${profile.offerLabel} are described with ${offerTypes.length ? list(offerTypes) : 'hasMenu'} markup.` : `Your ${profile.offerLabel} are not described in structured data.`,
     why: offerOk ? undefined : 'Structured offers let AI answer "what do they offer" and "how much" questions with confidence instead of guessing.',
-    fix: offerOk ? undefined : OFFER_FIX[profile.id] ?? `Add Service or Offer structured data describing your ${profile.offerLabel}, including prices in SGD where you publish them.`,
+    fix: offerOk ? undefined : (profile.id === 'ecommerce' && (ctx.platform.cms === 'Shopify' || ctx.platform.woo) ? `Make sure every product page has Product structured data with price, currency (SGD) and availability. Your ${ctx.platform.cms === 'Shopify' ? 'Shopify theme' : 'WooCommerce setup'} can usually do this; check it is switched on.` : undefined) ?? OFFER_FIX[profile.id] ?? `Add Service or Offer structured data describing your ${profile.offerLabel}, including prices in SGD where you publish them.`,
     effort: offerOk ? undefined : 'Moderate' }));
 
   const faq = types.includes('FAQPage');

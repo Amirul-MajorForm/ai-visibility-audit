@@ -19,7 +19,7 @@ export function contentChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'titles', category: 'content', title: 'Page titles', weight: 1.5, score: goodTitles.length / n,
     finding: tBad.length ? `${tBad.length} of ${n} pages have a missing, duplicated, too short or too long title: ${list(tBad.map((p) => `${path(p.url)} ("${p.raw.title || 'none'}")`))}.` : 'Every page we reviewed has a clear, unique title.',
     why: tBad.length ? 'The page title is the strongest one-line summary of a page. AI and search engines use it to decide what the page is about.' : undefined,
-    fix: tBad.length ? `Give each page a unique 20 to 70 character title that says what you offer${profile.physical ? ' and where' : ''}, e.g. "${profile.titleExample}".` : undefined,
+    fix: tBad.length ? `Give each page a unique 20 to 70 character title that says what you offer${profile.physical ? ' and where' : ''}, e.g. "${ctx.examples!.titleExample}".` : undefined,
     effort: tBad.length ? 'Quick win' : undefined }));
 
   // Meta descriptions
@@ -55,11 +55,11 @@ export function contentChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'location', category: 'content', title: profile.physical ? 'Location clearly stated' : 'Where you operate', weight: profile.physical ? 2 : 1, score: profile.physical ? locScore : Math.min(1, locScore + 0.3),
     finding: postal ? 'Your full address with postal code is in readable text.' : sg ? `You mention Singapore, but we could not find a full address with postal code in readable text.` : 'We could not find your location or service area stated in readable text.',
     why: postal ? undefined : profile.physical
-      ? `Many searches for ${profile.noun.replace(/^an? /, '')}s are local ("${profile.query}"). Without a clear address, AI cannot place you on the map.`
+      ? 'Many searches for businesses like yours are local: people add their neighbourhood or ask for somewhere "near me". Without a clear address, AI cannot place you on the map.'
       : 'AI often filters recommendations by country or city. Stating where you are based and who you serve helps you appear in "in Singapore" answers.',
     fix: postal ? undefined : profile.physical
       ? 'Show your full address (street, unit, postal code) in plain text in the footer and on the contact page, plus the neighbourhood and nearest MRT.'
-      : 'State where you are based and which markets you serve (e.g. "Singapore-based, delivering island-wide") in plain text, and add your registered address to the footer.',
+      : 'State in plain text where you are based and which areas or countries you serve, and add your registered address to the footer.',
     effort: postal ? undefined : 'Quick win' }));
 
   // Pricing
@@ -68,7 +68,7 @@ export function contentChecks(ctx: Ctx): Check[] {
   checks.push(mk({ id: 'pricing', category: 'content', title: 'Pricing is public', weight: 2.5 * profile.pricingImportance, score: priceRaw ? 1 : priceAny ? 0.4 : 0,
     finding: priceRaw ? 'Prices are published in readable text.' : priceAny ? 'Prices appear only after JavaScript runs, so AI cannot read them.' : 'We could not find any prices on the pages we reviewed.',
     why: priceRaw ? undefined : '"How much does it cost" is one of the most common questions people ask AI. Without a price, AI says "contact them for a quote" or recommends a competitor whose prices it can see.',
-    fix: priceRaw ? undefined : `Publish at least starting prices or typical ranges, e.g. "${profile.pricingExample}".${profile.pricingImportance < 0.7 ? ' If prices vary case by case, explain how they are worked out.' : ''}`,
+    fix: priceRaw ? undefined : `Publish at least starting prices or typical ranges: ${profile.pricingGuide}.${profile.pricingImportance < 0.7 ? ' If prices vary case by case, explain how they are worked out.' : ''}`,
     effort: priceRaw ? undefined : 'Quick win' }));
 
   // Hours
@@ -86,7 +86,7 @@ export function contentChecks(ctx: Ctx): Check[] {
   const contact = any('phone') || any('email');
   checks.push(mk({ id: 'contact', category: 'content', title: 'Contact details', weight: 1, score: contact ? 1 : 0,
     finding: contact ? 'A phone number or email address is in readable text.' : 'No phone number or email address in readable text.',
-    fix: contact ? undefined : 'Show phone, WhatsApp and email as text (not only as icons or images).', effort: contact ? undefined : 'Quick win' }));
+    fix: contact ? undefined : 'Show your phone number and email address as text (not only as icons or images).', effort: contact ? undefined : 'Quick win' }));
 
   // FAQ content
   const qs = [...new Set(pages.flatMap((p) => (p.rendered ?? p.raw).questionHeadings))];
@@ -114,7 +114,7 @@ export function contentChecks(ctx: Ctx): Check[] {
   const altScore = imgs ? alts / imgs : 1;
   checks.push(mk({ id: 'alt-text', category: 'content', title: 'Image descriptions (alt text)', weight: 1, score: altScore,
     finding: imgs ? `${pct(altScore)} of ${imgs} images have a text description.` : 'No images found in the HTML.',
-    why: altScore < 0.8 ? `AI cannot see images. Alt text is how it learns that a photo shows "${profile.altExample}".` : undefined,
+    why: altScore < 0.8 ? 'AI cannot see images. Alt text is the only way it learns what a photo shows: the product, the place or the people in it.' : undefined,
     fix: altScore < 0.8 ? 'Add short, descriptive alt text to photos of your products, premises, team and work.' : undefined,
     effort: altScore < 0.8 ? 'Quick win' : undefined }));
 

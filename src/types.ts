@@ -58,7 +58,7 @@ export interface AuditResult {
   finalUrl: string;
   host: string;
   clientName: string;
-  business: { id: string; label: string; detected: boolean; confidence: string; reason: string; query: string };
+  business: { id: string; label: string; detected: boolean; confidence: string; reason: string; offering?: string; query?: string };
   overall: number;
   grade: string;
   summary: string;

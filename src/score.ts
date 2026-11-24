@@ -7,6 +7,7 @@ import { contentChecks } from './checks/content.js';
 import { discoveryChecks } from './checks/discovery.js';
 import { list } from './checks/util.js';
 import { typesOf } from './page.js';
+import { brandFromTitle, buildExamples } from './examples.js';
 
 export const CATEGORY_META: Record<CategoryId, { name: string; blurb: string; weight: number }> = {
   access: { name: 'AI Crawler Access', blurb: 'Can ChatGPT, Claude, Gemini and Perplexity get into the site at all?', weight: 30 },
@@ -41,12 +42,25 @@ function clientName(ctx: Ctx): string {
   const strip = (s: string) => s.replace(/\s[-|–:]\s(Singapore|SG)$/i, '').trim();
   if (biz?.name && typeof biz.name === 'string') return strip(biz.name);
   const home = ctx.pages[0].raw;
-  if (home.og['og:site_name']) return home.og['og:site_name'];
-  const t = home.title.split(/\s[|\-–:]\s/).map((s) => s.trim()).filter(Boolean);
-  return strip(t.length > 1 ? t[t.length - 1] : ctx.host.replace(/^www\./, ''));
+  if (home.og['og:site_name']) return strip(home.og['og:site_name']);
+  // The part of the title that matches the domain (e.g. "Kee Song" for shop.keesong.com), not the tagline.
+  const fromTitle = brandFromTitle(home.title, ctx.host);
+  if (fromTitle) return strip(fromTitle);
+  const first = home.title.split(/\s[|\-–—:]\s/)[0]?.trim();
+  return first && first.split(' ').length <= 4 ? strip(first) : ctx.host.replace(/^(www|shop|store)\./, '');
 }
 
 export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
+  const name = clientOverride ?? clientName(ctx);
+  const home = ctx.pages[0].rendered ?? ctx.pages[0].raw;
+  ctx.examples = buildExamples({
+    title: ctx.pages[0].raw.title || home.title,
+    description: ctx.pages[0].raw.metaDescription || home.metaDescription,
+    host: ctx.host,
+    brand: name,
+    categoryNoun: ctx.profile.categoryNoun,
+    physical: ctx.profile.physical,
+  });
   const all = [...accessChecks(ctx), ...renderingChecks(ctx), ...contentChecks(ctx), ...schemaChecks(ctx), ...discoveryChecks(ctx)];
   const categories: Category[] = (Object.keys(CATEGORY_META) as CategoryId[]).map((id) => {
     const checks = all.filter((c) => c.category === id);
@@ -61,7 +75,6 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
     .sort((a, b) => impactOf(b, categories) - impactOf(a, categories))
     .slice(0, 7);
 
-  const name = clientOverride ?? clientName(ctx);
   const g = grade(overall);
   const sorted = [...categories].sort((a, b) => b.score - a.score);
   const best = sorted[0];
@@ -90,7 +103,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
     finalUrl: ctx.pages[0].url,
     host: ctx.host,
     clientName: name,
-    business: { id: ctx.profile.id, label: ctx.profile.label, detected: ctx.detection.detected, confidence: ctx.detection.confidence, reason: ctx.detection.reason, query: ctx.profile.query },
+    business: { id: ctx.profile.id, label: ctx.profile.label, detected: ctx.detection.detected, confidence: ctx.detection.confidence, reason: ctx.detection.reason, offering: ctx.examples.offering, query: ctx.examples.query },
     overall,
     grade: g,
     summary,

@@ -19,7 +19,7 @@ export const PAGE_KINDS: Record<PageKind, { label: string; re: RegExp }> = {
   reviews: { label: 'Reviews', re: /reviews?|testimonials?/i },
   shipping: { label: 'Shipping / returns', re: /shipping|delivery|returns?|refund/i },
   offer: { label: 'Trial / offer', re: /trial|promo|offers?\b|first-?(class|timer|visit)|new-?(here|patients?|customers?)|deals/i },
-  features: { label: 'Features', re: /features?|how-?it-?works|platform|integrations?|product-?tour/i },
+  features: { label: 'Features', re: /features?(?![a-z])|how-?it-?works|platform|integrations?|product-?tour/i },
 };
 
 export interface Profile {
@@ -40,12 +40,12 @@ export interface Profile {
   /** Structured data types that describe the offer. */
   offerTypes: string[];
   offerLabel: string;
-  // Example copy
-  query: string;
-  titleExample: string;
-  pricingExample: string;
+  // Example copy. Site-specific examples come from examples.ts; these are category-level only.
+  /** Plain category name used when the site's own wording gives no clear offering, e.g. "gym or fitness studio". */
+  categoryNoun?: string;
+  /** What to publish about pricing, without invented figures. */
+  pricingGuide: string;
   faqExamples: string[];
-  altExample: string;
   /** Detection: keywords in the homepage title, description and headings. */
   keywords: RegExp;
 }
@@ -59,11 +59,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'pricing', 'booking', 'contact', 'about', 'faq', 'offer'],
     hoursLabel: 'opening hours or class times', pricingImportance: 1,
     offerTypes: LOCAL_OFFER, offerLabel: 'classes, memberships and prices',
-    query: 'best pilates studio near Tanjong Pagar',
-    titleExample: 'Reformer Pilates in Tanjong Pagar | Brand',
-    pricingExample: 'Classes from S$35, memberships from S$199/month, first trial S$25',
+    categoryNoun: 'gym or fitness studio', pricingGuide: 'class or session prices, membership options and any trial offer',
     faqExamples: ['Do I need experience?', 'What should I bring?', 'Is there a trial class?', 'How much is a membership?'],
-    altExample: 'small-group strength class in our studio',
     keywords: /\b(gyms?|fitness|pilates|yoga|crossfit|hiit|personal train\w*|training|trainers?|bootcamp|boxing|martial|muay thai|barre|spin|cycling studio|workouts?|strength|conditioning|athletes?)\b/gi,
   },
   {
@@ -72,12 +69,9 @@ export const PROFILES: Profile[] = [
     pages: ['menu', 'booking', 'contact', 'about', 'faq', 'offer'],
     hoursLabel: 'opening hours', pricingImportance: 0.8,
     offerTypes: ['Menu', 'MenuSection', 'MenuItem', 'Offer'], offerLabel: 'menu and prices',
-    query: 'best brunch spot in Tiong Bahru',
-    titleExample: 'Modern Thai Restaurant in Tiong Bahru | Brand',
-    pricingExample: 'Mains from S$18, set lunch S$28 on weekdays',
-    faqExamples: ['Do you take reservations?', 'Is it halal?', 'Are there vegetarian options?', 'Is there parking nearby?'],
-    altExample: 'signature crab pasta served at our Tiong Bahru outlet',
-    keywords: /\b(restaurant|cafe|café|coffee|bistro|bar|brunch|dining|menu|cuisine|bakery|eatery|kitchen|food|halal|omakase|hawker)\b/gi,
+    categoryNoun: 'restaurant', pricingGuide: 'typical price ranges for mains or set menus',
+    faqExamples: ['Do you take reservations?', 'Do you cater to dietary needs?', 'Is it suitable for groups?', 'Is there parking nearby?'],
+    keywords: /\b(restaurants?|cafe|café|coffee shop|bistro|bar|brunch|dining|dine-in|reservations?|cuisine|eatery|omakase|hawker|chef)\b/gi,
   },
   {
     id: 'beauty', label: 'Beauty, salon or spa', noun: 'a salon', physical: true,
@@ -85,11 +79,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'pricing', 'booking', 'contact', 'about', 'faq', 'offer'],
     hoursLabel: 'opening hours', pricingImportance: 1,
     offerTypes: LOCAL_OFFER, offerLabel: 'treatments and prices',
-    query: 'best facial spa in Orchard for sensitive skin',
-    titleExample: 'Korean Facials and Skin Treatments in Orchard | Brand',
-    pricingExample: 'Facials from S$88, first-trial package S$58',
+    categoryNoun: 'salon or spa', pricingGuide: 'starting prices for each treatment and any first-visit offer',
     faqExamples: ['Is it suitable for sensitive skin?', 'How long does a session take?', 'Is there a first-trial price?', 'Do I need to book in advance?'],
-    altExample: 'treatment room at our Orchard salon',
     keywords: /\b(salon|spa|beauty|facial|hair|nails?|lash|brow|massage|skin ?care|aesthetic|waxing|manicure|pedicure)\b/gi,
   },
   {
@@ -98,11 +89,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'team', 'booking', 'contact', 'pricing', 'faq', 'about'],
     hoursLabel: 'clinic hours', pricingImportance: 0.6,
     offerTypes: ['MedicalProcedure', 'MedicalTherapy', 'Service', 'Offer'], offerLabel: 'treatments, procedures and fees',
-    query: 'physiotherapy clinic near Novena for sports injuries',
-    titleExample: 'Sports Physiotherapy Clinic in Novena | Brand',
-    pricingExample: 'Initial consultation S$120, follow-up S$95',
+    categoryNoun: 'clinic', pricingGuide: 'consultation fees and typical costs for common treatments, plus whether insurance or Medisave applies',
     faqExamples: ['Do I need a referral?', 'Can I claim insurance or Medisave?', 'How long is a session?', 'What are your clinic hours?'],
-    altExample: 'our physiotherapist treating a knee injury',
     keywords: /\b(clinic|medical|doctor|dental|dentist|physio|physiotherap|chiropract|optometr|veterinar|vet|patients?|health ?care|specialist|surgery|therapy|tcm)\b/gi,
   },
   {
@@ -111,11 +99,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'pricing', 'team', 'contact', 'about', 'faq', 'reviews', 'offer'],
     hoursLabel: 'lesson times or opening hours', pricingImportance: 0.9,
     offerTypes: ['Course', 'CourseInstance', 'Service', 'Offer', 'Event'], offerLabel: 'courses, schedules and fees',
-    query: 'best PSLE maths tuition in Bishan',
-    titleExample: 'PSLE and Secondary Maths Tuition in Bishan | Brand',
-    pricingExample: 'Primary classes from S$280/month (4 lessons)',
-    faqExamples: ['What is the class size?', 'Is there a trial lesson?', 'Which levels do you teach?', 'Are tutors MOE-trained?'],
-    altExample: 'small-group P6 maths lesson in our Bishan centre',
+    categoryNoun: 'tuition centre', pricingGuide: 'fees per level or course, lesson frequency and class size',
+    faqExamples: ['What is the class size?', 'Is there a trial lesson?', 'Which levels do you teach?', 'What are the tutors\' qualifications?'],
     keywords: /\b(tuition|tutor|school|academy|enrichment|courses?|classes|lessons|psle|o-?level|a-?level|ib|preschool|childcare|learning centre|education|training provider)\b/gi,
   },
   {
@@ -124,11 +109,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'booking', 'pricing', 'contact', 'about', 'faq', 'offer'],
     hoursLabel: 'check-in and check-out times', pricingImportance: 0.8,
     offerTypes: ['HotelRoom', 'Suite', 'Offer', 'LodgingReservation'], offerLabel: 'rooms, rates and amenities',
-    query: 'boutique hotel near Chinatown with a rooftop pool',
-    titleExample: 'Boutique Hotel in Chinatown, Singapore | Brand',
-    pricingExample: 'Rooms from S$220/night including breakfast',
+    categoryNoun: 'hotel', pricingGuide: 'room rates from, and what is included',
     faqExamples: ['What time is check-in?', 'Is breakfast included?', 'Is there parking?', 'Are pets allowed?'],
-    altExample: 'deluxe king room with city view',
     keywords: /\b(hotel|resort|rooms?|suites?|stay|accommodation|hostel|villa|check-?in|guests?|lodging)\b/gi,
   },
   {
@@ -137,11 +119,8 @@ export const PROFILES: Profile[] = [
     pages: ['products', 'contact', 'about', 'pricing', 'faq', 'shipping', 'offer'],
     hoursLabel: 'opening hours', pricingImportance: 0.9,
     offerTypes: ['Product', 'Offer', 'OfferCatalog', 'AggregateOffer'], offerLabel: 'products and prices',
-    query: 'where to buy a solid wood dining table in Singapore',
-    titleExample: 'Solid Wood Furniture Showroom in Singapore | Brand',
-    pricingExample: 'Dining tables from S$1,290, free delivery above S$500',
+    pricingGuide: 'starting prices for your main product ranges, plus delivery charges',
     faqExamples: ['Can I visit the showroom?', 'Do you deliver island-wide?', 'What is the warranty?', 'Can I return an item?'],
-    altExample: 'teak dining table in our Ubi showroom',
     keywords: /\b(showroom|store|shop|boutique|outlet|retail|florist|furniture|appliances?|jewell?ery)\b/gi,
   },
   {
@@ -150,12 +129,9 @@ export const PROFILES: Profile[] = [
     pages: ['products', 'shipping', 'faq', 'about', 'contact', 'reviews', 'offer'],
     pricingImportance: 1,
     offerTypes: ['Product', 'Offer', 'AggregateOffer', 'ProductGroup'], offerLabel: 'products, prices and availability',
-    query: 'best natural dog treats delivered in Singapore',
-    titleExample: 'Natural Dog Treats, Delivered in Singapore | Brand',
-    pricingExample: 'show the price on every product page, plus delivery fees and the free-delivery threshold',
+    pricingGuide: 'the price on every product page, plus delivery fees and any free-delivery threshold',
     faqExamples: ['How long does delivery take?', 'What is the return policy?', 'Do you ship overseas?', 'Which payment methods do you accept?'],
-    altExample: 'chicken jerky dog treats, 100g pouch',
-    keywords: /\b(shop now|shop all|add to (cart|bag)|free shipping|checkout|buy online|order online|best ?sellers|new arrivals)\b/gi,
+    keywords: /\b(shop now|shop all|shop online|online store|online shop|add to (cart|bag)|free shipping|free delivery|delivery|delivered|deliver(?:ed)? to your door|checkout|buy online|buy now|order online|best ?sellers|new arrivals)\b/gi,
   },
   {
     id: 'saas', label: 'Software or tech product', noun: 'a software company', physical: false,
@@ -163,11 +139,8 @@ export const PROFILES: Profile[] = [
     pages: ['features', 'pricing', 'about', 'faq', 'contact', 'work', 'reviews'],
     pricingImportance: 0.8,
     offerTypes: ['SoftwareApplication', 'WebApplication', 'Offer', 'Product'], offerLabel: 'product, plans and pricing',
-    query: 'best HR software for SMEs in Singapore',
-    titleExample: 'Payroll and HR Software for Singapore SMEs | Brand',
-    pricingExample: 'Starter S$8 per user per month, Pro S$15, free 14-day trial',
-    faqExamples: ['Is there a free trial?', 'Does it integrate with Xero?', 'Is my data stored in Singapore?', 'Can I cancel any time?'],
-    altExample: 'dashboard showing monthly payroll summary',
+    pricingGuide: 'plan prices (per user or per month) and whether there is a free trial',
+    faqExamples: ['Is there a free trial?', 'Which tools does it integrate with?', 'Is my data stored in Singapore?', 'Can I cancel any time?'],
     keywords: /\b(software|platform|saas|app|api|integrations?|dashboard|automat|cloud|free trial|sign up|demo|workflow)\b/gi,
   },
   {
@@ -176,11 +149,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'work', 'team', 'about', 'contact', 'faq', 'reviews'],
     hoursLabel: 'office hours', pricingImportance: 0.5,
     offerTypes: ['Service', 'Offer', 'OfferCatalog'], offerLabel: 'services and how engagements work',
-    query: 'best corporate secretarial firm for startups in Singapore',
-    titleExample: 'Corporate Secretarial Services for Singapore Startups | Brand',
-    pricingExample: 'Company incorporation from S$350, annual secretarial package from S$600',
+    pricingGuide: 'starting fees or typical ranges for your main services, and how fees are structured',
     faqExamples: ['Who do you typically work with?', 'How does an engagement start?', 'How are fees structured?', 'How long does it take?'],
-    altExample: 'our team at a client workshop',
     keywords: /\b(agency|consult|law|legal|lawyers?|accounting|accountants?|audit|tax|advisory|marketing|recruit|insurance|financial|architect|interior design|real estate|property|corporate secretar)\b/gi,
   },
   {
@@ -189,11 +159,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'pricing', 'work', 'contact', 'reviews', 'faq', 'about'],
     hoursLabel: 'operating hours', pricingImportance: 0.9,
     offerTypes: ['Service', 'Offer', 'OfferCatalog'], offerLabel: 'services and prices',
-    query: 'reliable aircon servicing in Jurong West',
-    titleExample: 'Aircon Servicing and Repair in Singapore | Brand',
-    pricingExample: 'General aircon servicing from S$25 per unit',
+    pricingGuide: 'starting prices for each service and any call-out or transport fees',
     faqExamples: ['Which areas do you cover?', 'Do you offer same-day service?', 'Is there a warranty?', 'How do I get a quote?'],
-    altExample: 'technician servicing a wall-mounted aircon unit',
     keywords: /\b(aircon|plumb|electric|renovat|contractor|cleaning|movers?|moving|handyman|pest control|painting|locksmith|interior)\b/gi,
   },
   {
@@ -202,11 +169,8 @@ export const PROFILES: Profile[] = [
     pages: ['services', 'products', 'pricing', 'about', 'contact', 'faq'],
     pricingImportance: 0.7,
     offerTypes: ['Service', 'Product', 'Offer', 'OfferCatalog'], offerLabel: 'products, services and prices',
-    query: 'best [your category] in Singapore',
-    titleExample: '[What you offer] in [Location] | Brand',
-    pricingExample: 'starting prices for your main products or services',
+    pricingGuide: 'starting prices for your main products or services',
     faqExamples: ['What exactly do you offer?', 'Who is it for?', 'How much does it cost?', 'How do I get started?'],
-    altExample: 'a plain description of what the photo shows',
     keywords: /$^/g,
   },
 ];
