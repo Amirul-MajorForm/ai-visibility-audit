@@ -12,6 +12,7 @@ import { list } from './checks/util.js';
 import { typesOf } from './page.js';
 import { brandFromTitle, buildExamples } from './examples.js';
 import { comparePage } from './compare.js';
+import { buildIssueGroups } from './issues.js';
 
 export const CATEGORY_META: Record<CategoryId, { name: string; blurb: string; weight: number; module: ModuleId }> = {
   access: { module: 'ai', name: 'AI Crawler Access', blurb: 'Can ChatGPT, Claude, Gemini and Perplexity get into the site at all?', weight: 30 },
@@ -232,6 +233,8 @@ export function buildResult(ctx: Ctx, opts: BuildOptions = { modules: ['ai'] }):
     modules,
     scorecards,
     priorities: top,
+    modulePriorities: Object.fromEntries(scorecards.map((sc) => [sc.module, topPriorities(byModule[sc.module] ?? [], sc.categories).slice(0, 7)])),
+    issueGroups: buildIssueGroups(ctx, opts.siteCrawl, modules),
     summary,
     bots: modules.includes('ai') ? ctx.bots : [],
     pages: modules.includes('ai')
@@ -257,12 +260,39 @@ export function buildResult(ctx: Ctx, opts: BuildOptions = { modules: ['ai'] }):
 
 /** Audits saved before SEO existed have a single AI score at the top level. */
 export function normalizeResult(r: AuditResult): AuditResult {
-  if (r.scorecards?.length) return r;
+  if (r.scorecards?.length) {
+    // Saved before per-audit priorities existed: derive them from the combined list.
+    if (!r.modulePriorities) r = { ...r, modulePriorities: Object.fromEntries(r.modules.map((m) => [m, r.priorities.filter((p) => p.module === m || p.alsoAffects === m)])) };
+    return { ...r, issueGroups: r.issueGroups ?? [] };
+  }
   const categories = (r.categories ?? []).map((c) => ({ ...c, checks: c.checks.map((k) => ({ ...k, module: k.module ?? ('ai' as const) })) }));
   return {
     ...r,
     modules: ['ai'],
     scorecards: [{ module: 'ai', name: MODULE_NAMES.ai, overall: r.overall ?? 0, grade: r.grade ?? grade(r.overall ?? 0), summary: r.summary, categories, stats: r.stats ?? [] }],
     priorities: (r.priorities ?? []).map((k) => ({ ...k, module: k.module ?? 'ai' })),
+    modulePriorities: { ai: (r.priorities ?? []).map((k) => ({ ...k, module: k.module ?? ('ai' as const) })) },
+    issueGroups: [],
+  };
+}
+
+/** A copy of the result limited to one audit, for the single-audit views and reports. */
+export function viewResult(input: AuditResult, view: ModuleId | 'all'): AuditResult {
+  const r = normalizeResult(input);
+  if (view === 'all' || !r.modules.includes(view) || r.modules.length === 1) return r;
+  const sc = r.scorecards.find((s) => s.module === view)!;
+  return {
+    ...r,
+    modules: [view],
+    scorecards: [sc],
+    summary: sc.summary,
+    priorities: (r.modulePriorities?.[view] ?? []).map((p) => ({ ...p, alsoAffects: undefined })),
+    issueGroups: (r.issueGroups ?? []).filter((g) => g.module === view),
+    bots: view === 'ai' ? r.bots : [],
+    pages: view === 'ai' ? r.pages : [],
+    siteCrawl: view === 'seo' ? r.siteCrawl : undefined,
+    speed: view === 'seo' ? r.speed : undefined,
+    search: view === 'seo' ? r.search : undefined,
+    searchNote: view === 'seo' ? r.searchNote : undefined,
   };
 }

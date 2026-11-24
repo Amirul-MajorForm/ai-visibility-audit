@@ -1,7 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { profileById } from '../profiles.js';
+import { viewResult } from '../score.js';
+import { renderReport } from '../report/html.js';
+import { writePdf } from '../report/pdf.js';
+import type { View } from './ui.js';
 import { searchDataAvailable, SEARCH_DBS } from '../seo/search.js';
 import type { ModuleId } from '../types.js';
 import { join } from 'node:path';
@@ -98,14 +102,30 @@ const server = createServer(async (req, res) => {
       }
       if (file) {
         if (job.status !== 'done') return send(res, 409, 'Report not ready', 'text/plain');
-        const name = `AI-Visibility-Audit-${safeName(job.clientName ?? 'report')}-${job.createdAt.slice(0, 10)}.${ext}`;
         const types: Record<string, string> = { html: 'text/html; charset=utf-8', pdf: 'application/pdf', json: 'application/json' };
+        const view = (['ai', 'seo'] as const).find((v) => v === url.searchParams.get('view'));
+        const mods = job.modules ?? ['ai'];
+        const kind = view ?? (mods.length > 1 ? 'all' : mods[0]);
+        const title = kind === 'all' ? 'Website Audit' : kind === 'seo' ? 'SEO Audit' : 'AI Visibility Audit';
+        const name = `${title.replace(/ /g, '-')}-${safeName(job.clientName ?? 'report')}-${job.createdAt.slice(0, 10)}.${ext}`;
+        // A single-audit version of a combined audit is built on first request, then cached.
+        if (view && mods.length > 1 && mods.includes(view) && ext !== 'json') {
+          const out = join(jobDir(id), `report-${view}.${ext}`);
+          if (!existsSync(out)) {
+            const full = JSON.parse(await readFile(join(jobDir(id), 'report.json'), 'utf8'));
+            const html = await renderReport(viewResult(full, view));
+            if (ext === 'html') await writeFile(out, html);
+            else await writePdf(html, out, job.clientName ?? '', title);
+          }
+          return sendFile(res, out, types[ext], ext === 'pdf' ? { 'content-disposition': `attachment; filename="${name}"` } : {});
+        }
         return sendFile(res, join(jobDir(id), file), types[ext], ext === 'pdf' ? { 'content-disposition': `attachment; filename="${name}"` } : {});
       }
       if (job.status === 'done') {
         try {
           const result = JSON.parse(await readFile(join(jobDir(id), 'report.json'), 'utf8'));
-          return send(res, 200, resultPage(job, result, logo));
+          const v = url.searchParams.get('view');
+          return send(res, 200, resultPage(job, result, logo, v === 'ai' || v === 'seo' ? v : 'all'));
         } catch {
           return send(res, 200, failedPage({ ...job, error: 'The saved results for this audit could not be read. Please run it again.' }, logo));
         }

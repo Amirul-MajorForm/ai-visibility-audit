@@ -1,8 +1,8 @@
 import { BRAND } from '../brand.js';
 import { PROFILES } from '../profiles.js';
 import { SEARCH_DBS } from '../seo/search.js';
-import { normalizeResult, impactIn, MODULE_NAMES } from '../score.js';
-import type { AuditResult, BotResult, Check, ModuleId, Status } from '../types.js';
+import { normalizeResult, viewResult, impactIn, MODULE_NAMES } from '../score.js';
+import type { AuditResult, BotResult, Check, IssueGroup, ModuleId, Status } from '../types.js';
 import type { Job } from './jobs.js';
 
 export const esc = (s: unknown) =>
@@ -227,6 +227,29 @@ table.compact td{padding:8px 16px}
 .tb i{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0}
 .tb span{position:absolute;bottom:-18px;font-size:11px;color:var(--subtle)}
 
+/* View switch */
+.viewbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.view-seg a{font-size:12.5px;font-weight:600;padding:6px 12px;color:var(--muted);text-decoration:none;border-right:1px solid var(--border);background:var(--surface)}
+.view-seg a:last-child{border-right:0}
+.view-seg a[aria-pressed=true]{background:var(--primary);color:#fff}
+
+/* Affected URLs */
+.urls-link{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:600;color:var(--primary);text-decoration:none;border-bottom:1px solid var(--accent)}
+.urls-link:hover{color:var(--accent)}
+.urls-layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+.issue-nav{padding:6px;position:sticky;top:72px;max-height:calc(100vh - 90px);overflow:auto}
+.issue-item{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;width:100%;text-align:left;font:inherit;font-size:13px;background:none;border:0;border-radius:7px;padding:8px 10px;cursor:pointer;color:var(--text)}
+.issue-item:hover{background:var(--bg)}
+.issue-item.on{background:#eef7f4;font-weight:600}
+.issue-item small{display:block;font-size:11px;color:var(--subtle);font-weight:500}
+.issue-item .ic{font-size:12px;font-weight:600;color:var(--muted);background:var(--bg);border-radius:99px;padding:1px 8px}
+.sev{width:8px;height:8px;border-radius:50%}
+.sev.fail{background:var(--risk)} .sev.warn{background:var(--work)} .sev.info{background:#a8b2b9}
+.issue-main{min-width:0}
+.issue-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--border)}
+.issue-head h2 .subtle{font-weight:500}
+.ext{color:var(--subtle);font-size:11px}
+
 /* Pages: AI view vs visitor view */
 .pg-head{display:grid;grid-template-columns:minmax(0,1.4fr) 260px minmax(0,1fr) 20px;gap:16px;padding:8px 20px;font-size:12px;font-weight:600;color:var(--muted);background:#fafbfc;border-bottom:1px solid var(--border)}
 .pg{border-bottom:1px solid var(--border)}
@@ -262,7 +285,8 @@ mark.vis{background:#dff3e8;color:var(--good-fg)}
   .cats{grid-template-columns:repeat(3,1fr)}
   .new-audit{grid-template-columns:1fr 1fr}
   .prio .body{grid-template-columns:1fr;padding-left:20px}
-  .compare,.grid2{grid-template-columns:1fr}
+  .compare,.grid2,.urls-layout{grid-template-columns:1fr}
+  .issue-nav{position:static;max-height:260px}
   .kpis{grid-template-columns:1fr 1fr}
   .seo-opts,.audit-types{grid-template-columns:1fr}
   .pg summary,.pg-head{grid-template-columns:minmax(0,1fr) 150px 20px}
@@ -656,6 +680,47 @@ function searchPanel(r: AuditResult) {
   <p class="subtle small" style="margin-top:12px">Semrush estimates for the ${esc(dbLabel)} database, for ${esc(d.domain)}, via Apify${d.costUsd ? ` (cost US$${d.costUsd.toFixed(2)})` : ''}. Modelled estimates, not the client's real Google data, and not part of the score.${d.notes.length ? ' ' + esc(d.notes.join(' ')) : ''}</p>`;
 }
 
+// ---------------------------------------------------------------- Affected URLs
+
+const SEV: Record<IssueGroup['severity'], string> = { fail: 'fail', warn: 'warn', info: 'info' };
+
+function urlsPanel(groups: IssueGroup[], multi: boolean) {
+  const sorted = [...groups].sort((a, b) => ['fail', 'warn', 'info'].indexOf(a.severity) - ['fail', 'warn', 'info'].indexOf(b.severity) || b.urls.length - a.urls.length);
+  const nav = sorted
+    .map(
+      (g, i) => `<button type="button" class="issue-item${i === 0 ? ' on' : ''}" data-group="${esc(g.id)}">
+      <span class="sev ${SEV[g.severity]}"></span><span class="il">${esc(g.label)}${multi ? `<small>${g.module === 'ai' ? 'AI visibility' : 'SEO'}</small>` : ''}</span><span class="ic">${g.urls.length}</span>
+    </button>`,
+    )
+    .join('');
+  const bodies = sorted
+    .map(
+      (g, i) => `<div class="issue-body" data-group="${esc(g.id)}"${i === 0 ? '' : ' hidden'}>
+      <div class="issue-head">
+        <div><h2>${esc(g.label)} <span class="subtle">${g.urls.length}</span></h2><p class="muted small">${esc(g.description)}</p></div>
+        <div class="actions"><input type="search" class="issue-q" placeholder="Filter URLs" style="width:200px;height:32px"><button type="button" class="btn sm csv">Download CSV</button></div>
+      </div>
+      <div class="table-scroll"><table class="compact">
+        <thead><tr><th style="width:34px">#</th><th>URL</th>${g.urls.some((u) => u.detail) ? `<th>${esc(g.detailLabel ?? 'Detail')}</th>` : ''}</tr></thead>
+        <tbody>${g.urls
+          .map(
+            (u, k) => `<tr data-url="${esc(u.url.toLowerCase())}"><td class="subtle">${k + 1}</td><td class="url-cell"><a href="${esc(u.url)}" target="_blank" rel="noopener">${esc(pathOnly(u.url))}</a> <span class="ext">↗</span></td>${g.urls.some((x) => x.detail) ? `<td class="muted small">${esc(u.detail ?? '')}</td>` : ''}</tr>`,
+          )
+          .join('')}</tbody>
+      </table></div>
+    </div>`,
+    )
+    .join('');
+  return `<div class="urls-layout"><nav class="card issue-nav" aria-label="Issues">${nav}</nav><div class="card issue-main">${bodies}</div></div>`;
+}
+
+/** "View 12 URLs" link for a check, when the crawl has a URL list for it. */
+function urlsLink(groups: IssueGroup[], checkId: string) {
+  const gs = groups.filter((g) => g.checkId === checkId);
+  const n = new Set(gs.flatMap((g) => g.urls.map((u) => u.url))).size;
+  return n ? `<a href="#urls" class="urls-link" data-group="${esc(gs.sort((a, b) => b.urls.length - a.urls.length)[0].id)}">View ${n} affected URL${n === 1 ? '' : 's'} →</a>` : '';
+}
+
 // ---------------------------------------------------------------- Result
 
 const STATUS: Record<Status, [string, string]> = { pass: ['Good', 'pass'], warn: ['Improve', 'warn'], fail: ['Fix', 'fail'], info: ['Note', 'info'] };
@@ -684,8 +749,13 @@ function rerunFields(job: Job, opts: { businessType?: boolean } = {}) {
   ].join('');
 }
 
-export function resultPage(job: Job, input: AuditResult, logo?: string) {
-  const r = normalizeResult(input);
+export type View = ModuleId | 'all';
+
+export function resultPage(job: Job, input: AuditResult, logo?: string, view: View = 'all') {
+  const full = normalizeResult(input);
+  const r = viewResult(full, view);
+  const groups = r.issueGroups ?? [];
+  const q = view === 'all' ? '' : `?view=${view}`;
   const hasAI = r.modules.includes('ai');
   const hasSEO = r.modules.includes('seo');
   const multi = r.scorecards.length > 1;
@@ -704,7 +774,7 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
         <span class="chev" aria-hidden="true">›</span>
       </summary>
       <div class="body">
-        <div><h4>What we found</h4><p>${esc(c.finding)}</p></div>
+        <div><h4>What we found</h4><p>${esc(c.finding)}</p>${urlsLink(groups, c.id)}</div>
         <div><h4>Why it matters</h4><p class="muted">${esc(c.why ?? '')}</p></div>
         <div class="fix"><h4>What to do</h4><p>${esc(c.fix)}</p></div>
       </div>
@@ -720,6 +790,7 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
         <h3>${esc(c.title)}<span class="cat-label">${multi ? `${MODULE_NAMES[c.module]} · ` : ''}${esc(c.catName)}</span></h3>
         <p>${esc(c.finding)}</p>
         ${c.fix && c.status !== 'pass' ? `<div class="fixline"><b>Fix:</b> ${esc(c.fix)}</div>` : ''}
+        ${c.status === 'pass' ? '' : urlsLink(groups, c.id)}
         ${c.evidence?.length ? `<details><summary>Evidence (${c.evidence.length})</summary><ul>${c.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></details>` : ''}
       </div>
     </div>`,
@@ -798,6 +869,13 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
     r.clientName,
     `<main class="page">
   <div class="crumbs"><a href="/">Audits</a> / ${esc(r.clientName)}</div>
+  ${
+    full.modules.length > 1
+      ? `<div class="viewbar"><span class="muted small">Show</span><div class="seg view-seg" role="group" aria-label="Which audit to show">${(['all', 'ai', 'seo'] as View[])
+          .map((v) => `<a href="/audits/${esc(job.id)}${v === 'all' ? '' : `?view=${v}`}" class="view-link" aria-pressed="${v === view}">${v === 'all' ? 'Both audits' : v === 'ai' ? 'AI visibility only' : 'SEO only'}</a>`)
+          .join('')}</div></div>`
+      : ''
+  }
   <div class="head">
     <div>
       <h1>${esc(r.clientName)}</h1>
@@ -813,8 +891,8 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
         ${rerunFields(job)}
         <button class="btn" type="submit" title="Run this audit again with the same options">Re-run</button>
       </form>
-      <a class="btn" href="/audits/${esc(job.id)}/report.html" target="_blank" rel="noopener">Client report ↗</a>
-      <a class="btn primary" href="/audits/${esc(job.id)}/report.pdf">Download PDF</a>
+      <a class="btn" href="/audits/${esc(job.id)}/report.html${q}" target="_blank" rel="noopener">Client report${view === 'all' ? '' : ` (${MODULE_NAMES[view]})`} ↗</a>
+      <a class="btn primary" href="/audits/${esc(job.id)}/report.pdf${q}">Download PDF${view === 'all' ? '' : ` (${MODULE_NAMES[view]})`}</a>
     </div>
   </div>
 
@@ -868,6 +946,7 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="priorities">Priorities<span class="count">${r.priorities.length}</span></button>
     <button class="tab" role="tab" data-tab="checks">All checks<span class="count">${all.length}</span></button>
+    ${groups.length ? `<button class="tab" role="tab" data-tab="urls">Affected URLs<span class="count">${groups.length}</span></button>` : ''}
     ${hasSEO && r.siteCrawl ? `<button class="tab" role="tab" data-tab="crawl">Site crawl<span class="count">${r.siteCrawl.pagesCrawled}</span></button>` : ''}
     ${hasSEO && (r.search || r.searchNote) ? `<button class="tab" role="tab" data-tab="search">Search data</button>` : ''}
     ${hasAI ? `<button class="tab" role="tab" data-tab="crawlers">AI crawlers<span class="count">${answerBots.filter((x) => x.robots === 'allowed' && x.live !== 'blocked' && x.live !== 'challenged').length}/${answerBots.length}</span></button>
@@ -905,6 +984,7 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
     <div class="pg-head hide-sm"><span>Page</span><span>AI can read</span><span>Notes</span><span></span></div>
     ${pageRows}
   </section>` : ''}
+  ${groups.length ? `<section class="panel" data-panel="urls" hidden>${urlsPanel(groups, multi)}</section>` : ''}
   ${hasSEO && r.siteCrawl ? `<section class="panel" data-panel="crawl" hidden>${crawlPanel(r)}</section>` : ''}
   ${hasSEO && (r.search || r.searchNote) ? `<section class="panel" data-panel="search" hidden>${searchPanel(r)}</section>` : ''}
 </main>
@@ -926,6 +1006,23 @@ export function resultPage(job: Job, input: AuditResult, logo?: string) {
   }
   document.querySelectorAll('.seg button').forEach(function(b){b.addEventListener('click',function(){st=b.dataset.status;document.querySelectorAll('.seg button').forEach(function(x){x.setAttribute('aria-pressed',x===b)});filter()})});
   cat.addEventListener('change',filter);
+  // Affected URLs: pick an issue, filter, export
+  function pickGroup(id){
+    document.querySelectorAll('.issue-item').forEach(function(b){b.classList.toggle('on',b.dataset.group===id)});
+    document.querySelectorAll('.issue-body').forEach(function(d){d.hidden=d.dataset.group!==id});
+  }
+  document.querySelectorAll('.issue-item').forEach(function(b){b.addEventListener('click',function(){pickGroup(b.dataset.group);if(innerWidth<960)document.querySelector('.issue-main').scrollIntoView({behavior:'smooth'})})});
+  document.querySelectorAll('.urls-link').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();pickGroup(a.dataset.group);show('urls');document.querySelector('.tabs').scrollIntoView({behavior:'smooth'})})});
+  document.querySelectorAll('.issue-q').forEach(function(inp){inp.addEventListener('input',function(){var v=inp.value.trim().toLowerCase();inp.closest('.issue-body').querySelectorAll('tbody tr').forEach(function(tr){tr.hidden=v&&tr.dataset.url.indexOf(v)<0})})});
+  document.querySelectorAll('.issue-body .csv').forEach(function(btn){btn.addEventListener('click',function(){
+    var body=btn.closest('.issue-body'),rows=[[ 'URL' ].concat([].slice.call(body.querySelectorAll('thead th')).slice(2).map(function(th){return th.textContent}))];
+    body.querySelectorAll('tbody tr').forEach(function(tr){if(tr.hidden)return;var c=tr.querySelectorAll('td');rows.push([c[1].querySelector('a').href].concat([].slice.call(c).slice(2).map(function(td){return td.textContent})))});
+    var csv=rows.map(function(r){return r.map(function(x){return '"'+String(x).replace(/"/g,'""')+'"'}).join(',')}).join('\\n');
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=body.dataset.group+'.csv';a.click();
+  })});
+  // keep the current tab when switching views
+  document.querySelectorAll('.view-link').forEach(function(a){a.addEventListener('click',function(){a.href=a.href.split('#')[0]+location.hash})});
+
   var only=document.getElementById('onlyissues'),cq=document.getElementById('crawlq');
   function crawlFilter(){
     if(!only)return;var q=cq.value.trim().toLowerCase(),n=0,rows=document.querySelectorAll('#crawlrows tr');

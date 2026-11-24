@@ -70,6 +70,10 @@ The crawler follows internal links from the homepage (no query-string URLs, resp
 
 **Search data** (optional, needs `APIFY_TOKEN`): runs the `pnda/semrush-keyword` actor in three modes: domain overview (authority score, backlinks, ranking keywords, organic competitors), backlinks, and keyword ideas seeded from what the site says it offers. Each run has a hard spending cap (`maxTotalChargeUsd`), so an audit costs about US$0.20. Results are labelled as Semrush estimates and are **not** part of the score; if the actor fails or hits its daily limit, the audit still completes and says why. The data comes from a community actor that uses Semrush data without a Semrush subscription; review Semrush's terms before relying on it for client work.
 
+**Views:** when both audits ran, the results page has a switch for *Both audits / AI visibility only / SEO only*. Each view shows only that audit's score, its own top priorities, checks and tabs, and the Client report and PDF buttons download that version (`report.pdf?view=seo` or `?view=ai`, built on first request and cached).
+
+**Affected URLs:** a tab listing the URLs behind each issue (broken pages, duplicate titles and descriptions, missing or multiple H1s, thin and duplicate pages, redirects, noindex, canonical problems, deep or unlinked pages, and AI issues such as content hidden behind JavaScript). Each list can be filtered and downloaded as CSV, and every check links straight to its list ("View N affected URLs"). The PDF includes an appendix with up to 12 URLs per issue.
+
 **Combined priorities:** checks that are the same fix in both audits (titles, meta descriptions, H1s, sitemap, canonical, HTTPS, structured data, speed, alt text, language) appear once in the priority list, tagged "SEO + AI visibility".
 
 ## What the AI visibility audit checks

@@ -270,6 +270,24 @@ export async function renderReport(input: AuditResult): Promise<string> {
       <p class="note">Search data: Semrush estimates for the ${esc(dbName(sd.db))} database, for ${esc(sd.domain)}. These are modelled estimates, not your actual Google traffic, and are not part of the score.${sd.notes.length ? ' ' + esc(sd.notes.join(' ')) : ''}</p>`
     : '';
 
+  // Appendix: URLs behind each issue (fail/warn only, capped so the PDF stays readable).
+  const appendixGroups = (r.issueGroups ?? [])
+    .filter((g) => g.severity !== 'info')
+    .sort((a, b) => ['fail', 'warn'].indexOf(a.severity) - ['fail', 'warn'].indexOf(b.severity) || b.urls.length - a.urls.length);
+  const appendix = appendixGroups
+    .map(
+      (g) => `<div class="apx">
+      <h3>${esc(g.label)} <span>${g.urls.length} URL${g.urls.length === 1 ? '' : 's'}${r.modules.length > 1 ? ` · ${g.module === 'ai' ? 'AI visibility' : 'SEO'}` : ''}</span></h3>
+      <p>${esc(g.description)}</p>
+      <table class="mini apx-t"><tbody>${g.urls
+        .slice(0, 12)
+        .map((u) => `<tr><td class="url">${esc(pathOf(u.url))}</td>${g.urls.some((x) => x.detail) ? `<td class="muted">${esc((u.detail ?? '').slice(0, 110))}</td>` : ''}</tr>`)
+        .join('')}</tbody></table>
+      ${g.urls.length > 12 ? `<p class="more">+ ${g.urls.length - 12} more. The full list is available as a spreadsheet on request.</p>` : ''}
+    </div>`,
+    )
+    .join('');
+
   let secNo = 0;
   const nextNum = () => String(++secNo).padStart(2, '0');
   const blockedAny = r.bots.some((b) => b.live === 'blocked' || b.live === 'challenged' || b.robots === 'blocked');
@@ -405,6 +423,15 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
 .num{text-align:right;white-space:nowrap}
 .url{word-break:break-all}
 .ratio{font-family:var(--h);font-weight:600;border-bottom:3px solid var(--c);padding-bottom:1px}
+
+/* Appendix */
+.apx{background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:10px;break-inside:avoid}
+.apx h3{font-size:14.5px;margin-bottom:2px}
+.apx h3 span{font-family:var(--b);font-weight:500;font-size:12px;color:var(--muted);margin-left:6px}
+.apx p{font-size:12px;color:var(--muted);margin-bottom:6px}
+.apx-t td{font-size:11.5px;padding:3px 6px;border-bottom:1px solid #eef0f4}
+.apx-t td.url{word-break:break-all;width:55%}
+.apx .more{margin:6px 0 0;font-size:11px}
 
 /* Multi-audit layout */
 .keep,.next{break-inside:avoid}
@@ -600,6 +627,16 @@ ${
     )
     .join('')}
 </section>
+
+${
+  appendix
+    ? `<section class="sheet flow">
+  <div class="sec-head"><h2>Affected URLs</h2><span class="sec-num">${nextNum()} · Appendix</span></div>
+  <p class="lede">The pages behind each issue above, so your team can work through them one by one.</p>
+  ${appendix}
+</section>`
+    : ''
+}
 
 <section class="sheet flow">
   ${

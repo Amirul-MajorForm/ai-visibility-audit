@@ -130,6 +130,20 @@ export interface SearchData {
   costUsd?: number;
 }
 
+/** A list of URLs affected by one specific issue, for the "Affected URLs" view. */
+export interface IssueGroup {
+  id: string;
+  /** The check this list belongs to */
+  checkId: string;
+  module: ModuleId;
+  label: string;
+  description: string;
+  severity: 'fail' | 'warn' | 'info';
+  /** What the detail column means, e.g. "Title" or "Links from" */
+  detailLabel?: string;
+  urls: { url: string; detail?: string }[];
+}
+
 export interface AuditResult {
   version: string;
   auditedAt: string;
@@ -142,6 +156,10 @@ export interface AuditResult {
   scorecards: Scorecard[];
   /** Combined, de-duplicated priorities across the selected audits. */
   priorities: Check[];
+  /** Each audit's own top priorities, for the single-audit views. */
+  modulePriorities?: Partial<Record<ModuleId, Check[]>>;
+  /** URLs behind each issue, grouped. */
+  issueGroups?: IssueGroup[];
   summary: string;
   /** AI visibility: crawler access per bot, and the key pages compared raw vs rendered. */
   bots: BotResult[];
