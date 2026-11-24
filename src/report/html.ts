@@ -288,6 +288,35 @@ export async function renderReport(input: AuditResult): Promise<string> {
     )
     .join('');
 
+  // Competitor comparison
+  const comps = r.competitors ?? [];
+  const compRows = [
+    { name: r.clientName, you: true, error: undefined as string | undefined, cards: r.scorecards.map((s) => ({ module: s.module, overall: s.overall, categories: s.categories.map((c) => ({ id: c.id, name: c.name, score: c.score })) })) },
+    ...comps.filter((c) => !c.error).map((c) => ({ name: c.name, you: false, error: c.error, cards: c.scorecards })),
+  ];
+  const compareSection = comps.length
+    ? `${r.scorecards
+        .map(
+          (sc) => `<div class="cmpb"><h3>${sc.module === 'seo' ? 'SEO score' : 'AI readiness score'}</h3>${compRows
+            .map((x) => {
+              const v = x.cards.find((c) => c.module === sc.module)?.overall;
+              return `<div class="cmpb-row${x.you ? ' you' : ''}"><span class="cmpb-name">${esc(x.name)}</span><span class="cmpb-bar">${v === undefined ? '' : `<i style="width:${v}%;background:${gradeColor(v)}"></i>`}</span><span class="cmpb-v">${v ?? '–'}</span></div>`;
+            })
+            .join('')}</div>`,
+        )
+        .join('')}
+      <table class="pages cmp-cats"><thead><tr><th>Category</th>${compRows.map((x) => `<th class="num">${esc(x.name)}</th>`).join('')}</tr></thead>
+      <tbody>${r.scorecards
+        .flatMap((sc) => sc.categories.map((c) => ({ sc, c })))
+        .map(({ sc, c }) => {
+          const vals = compRows.map((x) => x.cards.flatMap((k) => k.categories).find((k) => k.id === c.id)?.score);
+          const top = Math.max(...vals.map((v) => v ?? -1));
+          return `<tr><td>${esc(c.name)}${r.scorecards.length > 1 ? ` <span class="muted small">${sc.module === 'ai' ? 'AI' : 'SEO'}</span>` : ''}</td>${vals.map((v) => `<td class="num">${v === undefined ? '–' : v === top ? `<b>${v}</b>` : v}</td>`).join('')}</tr>`;
+        })
+        .join('')}</tbody></table>
+      <p class="note">Competitors were scored with the same audits and business type${r.modules.includes('seo') ? ', with an SEO crawl of up to 50 pages each' : ''}. Bold marks the leader in each category.${comps.some((c) => c.error) ? ` ${comps.filter((c) => c.error).map((c) => `${esc(c.name)} could not be scored.`).join(' ')}` : ''}</p>`
+    : '';
+
   let secNo = 0;
   const nextNum = () => String(++secNo).padStart(2, '0');
   const blockedAny = r.bots.some((b) => b.live === 'blocked' || b.live === 'challenged' || b.robots === 'blocked');
@@ -423,6 +452,16 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
 .num{text-align:right;white-space:nowrap}
 .url{word-break:break-all}
 .ratio{font-family:var(--h);font-weight:600;border-bottom:3px solid var(--c);padding-bottom:1px}
+
+/* Competitors */
+.cmpb{background:var(--card);border-radius:14px;padding:14px 18px;margin-bottom:12px;break-inside:avoid}
+.cmpb h3{font-size:15px;margin-bottom:10px}
+.cmpb-row{display:grid;grid-template-columns:190px 1fr 40px;gap:12px;align-items:center;padding:5px 0;font-size:13px}
+.cmpb-row.you .cmpb-name{font-weight:700}
+.cmpb-bar{height:12px;background:#eceef2;border-radius:99px;overflow:hidden}
+.cmpb-bar i{display:block;height:100%;border-radius:99px}
+.cmpb-v{font-family:var(--h);font-weight:700;text-align:right}
+.cmp-cats{margin-top:6px}
 
 /* Appendix */
 .apx{background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:10px;break-inside:avoid}
@@ -569,6 +608,15 @@ table.mini td{padding:4px 6px}
   ${bands}
   ${r.priorities.length ? `<div class="callout"><strong>Start here:</strong> ${esc(r.priorities[0].title)}. ${esc(r.priorities[0].fix)}</div>` : ''}
 </section>
+
+${
+  compareSection
+    ? `<section class="sheet flow">
+  <div class="sec-head"><h2>How you compare</h2><span class="sec-num">${nextNum()} · Competitors</span></div>
+  ${compareSection}
+</section>`
+    : ''
+}
 
 ${
   hasAI

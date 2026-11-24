@@ -13,6 +13,7 @@ Options:
   --pages <n>         SEO: max pages to crawl (default 150)
   --db <country>      SEO search data country, e.g. sg, my, au (default sg)
   --no-search         SEO: skip Semrush search data (Apify)
+  --compare a.com,b.com  Score up to 2 competitors the same way (scores only)
   --out <dir>         Output folder (default reports/)
   --no-pdf            Skip the PDF
 
@@ -21,7 +22,7 @@ Writes report.json, report.html and report.pdf. To run the web app instead: npm 
 }
 
 const args = process.argv.slice(2);
-const valueFlags = ['--client', '--out', '--audits', '--type', '--pages', '--db'];
+const valueFlags = ['--client', '--out', '--audits', '--type', '--pages', '--db', '--compare'];
 const url = args.find((a, i) => !a.startsWith('--') && !valueFlags.includes(args[i - 1]));
 if (!url || args.includes('--help')) usage();
 const opt = (k: string) => (args.includes(k) ? args[args.indexOf(k) + 1] : undefined);
@@ -39,6 +40,7 @@ const { result, dir } = await runAudit(
     crawlLimit: opt('--pages') ? Number(opt('--pages')) : undefined,
     searchData: !args.includes('--no-search'),
     searchDb: opt('--db'),
+    competitors: opt('--compare')?.split(',').map((s) => s.trim()).filter(Boolean),
     pdf: !args.includes('--no-pdf'),
     dir: (r, host) => resolve(opt('--out') ?? 'reports', `${host.replace(/^www\./, '').replace(/[^a-z0-9.-]/gi, '_')}-${r.auditedAt.slice(0, 10)}`),
   },
@@ -50,5 +52,6 @@ for (const sc of result.scorecards) {
   console.log(`  ${sc.name}: ${sc.overall}/100 (${sc.grade})`);
   for (const c of sc.categories) console.log(`    ${c.name.padEnd(22)} ${String(c.score).padStart(3)}`);
 }
+for (const c of result.competitors ?? []) console.log(`  vs ${c.name}: ${c.error ? `not scored (${c.error})` : c.scorecards.map((s) => `${s.module === 'ai' ? 'AI' : 'SEO'} ${s.overall}`).join(', ')}`);
 if (result.searchNote) console.log(`  Search data: ${result.searchNote}`);
 console.log(`\n  Report: ${dir}`);

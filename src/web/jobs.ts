@@ -18,6 +18,7 @@ export interface Job {
   crawlLimit?: number;
   searchData?: boolean;
   searchDb?: string;
+  competitors?: string[];
   status: JobStatus;
   createdAt: string;
   finishedAt?: string;
@@ -39,6 +40,7 @@ export interface JobOptions {
   crawlLimit?: number;
   searchData?: boolean;
   searchDb?: string;
+  competitors?: string[];
 }
 
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
@@ -85,7 +87,7 @@ export function queuePosition(id: string) {
 export async function createJob(url: string, o: JobOptions): Promise<Job> {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const id = `${stamp}-${randomBytes(4).toString('hex')}`;
-  const job: Job = { id, url, client: o.client?.trim() || undefined, businessType: o.businessType ?? 'auto', modules: o.modules, crawlLimit: o.crawlLimit, searchData: o.searchData, searchDb: o.searchDb, status: 'queued', createdAt: new Date().toISOString(), log: [] };
+  const job: Job = { id, url, client: o.client?.trim() || undefined, businessType: o.businessType ?? 'auto', modules: o.modules, crawlLimit: o.crawlLimit, searchData: o.searchData, searchDb: o.searchDb, competitors: o.competitors?.length ? o.competitors : undefined, status: 'queued', createdAt: new Date().toISOString(), log: [] };
   jobs.set(id, job);
   await mkdir(jobDir(id), { recursive: true });
   await save(job);
@@ -113,7 +115,7 @@ async function run(job: Job) {
   };
   await save(job);
   try {
-    const { result } = await runAudit(job.url, { client: job.client, businessType: job.businessType, modules: job.modules ?? ['ai'], crawlLimit: job.crawlLimit, searchData: job.searchData, searchDb: job.searchDb, dir: jobDir(job.id) }, log);
+    const { result } = await runAudit(job.url, { client: job.client, businessType: job.businessType, modules: job.modules ?? ['ai'], crawlLimit: job.crawlLimit, searchData: job.searchData, searchDb: job.searchDb, competitors: job.competitors, dir: jobDir(job.id) }, log);
     const scores = Object.fromEntries(result.scorecards.map((s) => [s.module, s.overall]));
     Object.assign(job, { status: 'done', clientName: result.clientName, host: result.host, overall: result.scorecards[0].overall, grade: result.scorecards[0].grade, scores, businessLabel: result.business.label });
     log('Done');

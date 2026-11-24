@@ -288,6 +288,7 @@ export function viewResult(input: AuditResult, view: ModuleId | 'all'): AuditRes
     summary: sc.summary,
     priorities: (r.modulePriorities?.[view] ?? []).map((p) => ({ ...p, alsoAffects: undefined })),
     issueGroups: (r.issueGroups ?? []).filter((g) => g.module === view),
+    competitors: r.competitors?.map((c) => ({ ...c, scorecards: c.scorecards.filter((s) => s.module === view) })),
     bots: view === 'ai' ? r.bots : [],
     pages: view === 'ai' ? r.pages : [],
     siteCrawl: view === 'seo' ? r.siteCrawl : undefined,

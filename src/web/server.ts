@@ -86,7 +86,15 @@ const server = createServer(async (req, res) => {
       if (!modules.length) return send(res, 400, homePage(listJobs(), { ...back, error: 'Choose at least one audit: AI visibility, SEO or both.' }));
       const v = await validateTarget(input);
       if (!v.ok) return send(res, 400, homePage(listJobs(), { ...back, error: v.error }));
-      const job = await createJob(v.url, { client, businessType, modules, crawlLimit: modules.includes('seo') ? crawlLimit : undefined, searchData, searchDb });
+      const compIn = form.getAll('competitor').map((c) => c.trim()).filter(Boolean).slice(0, 2);
+      const competitors: string[] = [];
+      for (const c of compIn) {
+        const cv = await validateTarget(c);
+        if (!cv.ok) return send(res, 400, homePage(listJobs(), { ...back, competitors: compIn, error: `Competitor "${c}": ${cv.error}` }));
+        if (new URL(cv.url).host.replace(/^www\./, '') === new URL(v.url).host.replace(/^www\./, '')) continue;
+        competitors.push(cv.url);
+      }
+      const job = await createJob(v.url, { client, businessType, modules, crawlLimit: modules.includes('seo') ? crawlLimit : undefined, searchData, searchDb, competitors: [...new Set(competitors)] });
       res.writeHead(303, { location: `/audits/${job.id}` });
       return res.end();
     }

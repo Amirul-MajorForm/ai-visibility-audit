@@ -144,6 +144,17 @@ export interface IssueGroup {
   urls: { url: string; detail?: string }[];
 }
 
+/** Scores only (no full report) for a competitor site, audited the same way as the client. */
+export interface CompetitorScore {
+  url: string;
+  host: string;
+  name: string;
+  scorecards: { module: ModuleId; overall: number; grade: string; categories: { id: CategoryId; name: string; score: number }[] }[];
+  /** Pages crawled for the SEO score */
+  pagesCrawled?: number;
+  error?: string;
+}
+
 export interface AuditResult {
   version: string;
   auditedAt: string;
@@ -161,6 +172,8 @@ export interface AuditResult {
   /** URLs behind each issue, grouped. */
   issueGroups?: IssueGroup[];
   summary: string;
+  /** Up to 2 competitors, scored with the same audits and business type. */
+  competitors?: CompetitorScore[];
   /** AI visibility: crawler access per bot, and the key pages compared raw vs rendered. */
   bots: BotResult[];
   pages: PageResult[];

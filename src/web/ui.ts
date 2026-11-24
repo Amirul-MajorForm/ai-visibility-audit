@@ -227,6 +227,17 @@ table.compact td{padding:8px 16px}
 .tb i{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0}
 .tb span{position:absolute;bottom:-18px;font-size:11px;color:var(--subtle)}
 
+/* Competitors */
+.compete{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
+.compete summary{cursor:pointer;font-weight:600;font-size:13.5px}
+.comp-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.compare-card{margin-bottom:20px}
+.compare-card tr.you td{background:#f4fbf8}
+.lead-tag{font-size:11px;font-weight:600;color:var(--good-fg);background:var(--good-bg);border-radius:99px;padding:1px 7px;white-space:nowrap}
+.cat-compare{border-top:1px solid var(--border)}
+.cat-compare summary{cursor:pointer;padding:12px 20px;font-weight:600;font-size:13px;color:var(--muted)}
+.cat-compare .lead{font-weight:700;color:var(--good-fg)}
+
 /* View switch */
 .viewbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .view-seg a{font-size:12.5px;font-weight:600;padding:6px 12px;color:var(--muted);text-decoration:none;border-right:1px solid var(--border);background:var(--surface)}
@@ -285,7 +296,7 @@ mark.vis{background:#dff3e8;color:var(--good-fg)}
   .cats{grid-template-columns:repeat(3,1fr)}
   .new-audit{grid-template-columns:1fr 1fr}
   .prio .body{grid-template-columns:1fr;padding-left:20px}
-  .compare,.grid2,.urls-layout{grid-template-columns:1fr}
+  .compare,.grid2,.urls-layout,.comp-inputs{grid-template-columns:1fr}
   .issue-nav{position:static;max-height:260px}
   .kpis{grid-template-columns:1fr 1fr}
   .seo-opts,.audit-types{grid-template-columns:1fr}
@@ -362,6 +373,7 @@ export interface HomeOptions {
   logo?: string;
   /** Apify token configured on the server */
   searchAvailable?: boolean;
+  competitors?: string[];
 }
 
 function scoreChips(j: Job) {
@@ -421,6 +433,14 @@ export function homePage(jobs: Job[], opts: HomeOptions = {}) {
         </div>
         <div><label for="db">Search data country</label><select id="db" name="db"${opts.searchAvailable ? '' : ' disabled'}>${SEARCH_DBS.map((d) => `<option value="${d.id}"${d.id === (opts.searchDb ?? 'sg') ? ' selected' : ''}>${esc(d.label)}</option>`).join('')}</select></div>
       </div>
+      <details class="compete"${opts.competitors?.length ? ' open' : ''}>
+        <summary>Compare with competitors <span class="subtle">(optional, up to 2)</span></summary>
+        <p class="field-hint" style="margin:4px 0 10px">Competitors get the same audits and business type, scores only. Each adds 1 to 2 minutes.</p>
+        <div class="comp-inputs">
+          <div><label for="comp1">Competitor 1</label><input id="comp1" name="competitor" placeholder="competitor.com.sg" value="${esc(opts.competitors?.[0] ?? '')}" inputmode="url" autocomplete="off"></div>
+          <div><label for="comp2">Competitor 2</label><input id="comp2" name="competitor" placeholder="another-competitor.sg" value="${esc(opts.competitors?.[1] ?? '')}" inputmode="url" autocomplete="off"></div>
+        </div>
+      </details>
       <p class="field-hint" id="timehint"></p>
     </form>
   </section>
@@ -450,9 +470,12 @@ if(f)f.addEventListener('input',function(){var q=f.value.trim().toLowerCase(),n=
     opts.hidden=!seo.checked;
     var any=boxes.some(function(b){return b.checked});
     boxes.forEach(function(b){b.setCustomValidity(any?'':'Choose at least one audit')});
-    var mins=(boxes[0].checked?1:0)+(seo.checked?Math.ceil(Number(pages.value)/100)+1:0);
+    var nComp=[].slice.call(document.querySelectorAll('input[name=competitor]')).filter(function(c){return c.value.trim()}).length;
+    var mins=(boxes[0].checked?1:0)+(seo.checked?Math.ceil(Number(pages.value)/100)+1:0)+nComp*((boxes[0].checked?1:0)+(seo.checked?1:0));
     hint.textContent=any?'Takes about '+Math.max(1,mins)+' minute'+(mins>1?'s':'')+'. The business type decides which pages and details are expected.':'';
   }
+  var comps=[].slice.call(document.querySelectorAll('input[name=competitor]'));
+  comps.forEach(function(c){c.addEventListener('input',upd)});
   boxes.concat([pages]).forEach(function(b){b.addEventListener('change',upd)});upd();
 })();
 </script>`,
@@ -473,13 +496,18 @@ const STAGES: { re: RegExp; label: string; module?: ModuleId }[] = [
   { re: /Crawling the site|Crawled \d+/, label: 'Crawling the site', module: 'seo' },
   { re: /page speed|PageSpeed/i, label: 'Measuring speed on mobile', module: 'seo' },
   { re: /Fetching search data/, label: 'Fetching search data', module: 'seo' },
-  { re: /Scoring/, label: 'Scoring' },
+  { re: /^\s*\d+s\s+Scoring$/, label: 'Scoring' },
+  { re: /Scoring competitor 1/, label: 'Scoring competitor 1' },
+  { re: /Scoring competitor 2/, label: 'Scoring competitor 2' },
   { re: /Building report|Writing PDF/, label: 'Building the client report' },
 ];
 
 function stagesFor(job: Job) {
   const mods = job.modules ?? ['ai'];
-  return STAGES.filter((s) => !s.module || mods.includes(s.module)).filter((s) => !/search data/.test(s.label) || job.searchData);
+  const n = job.competitors?.length ?? 0;
+  return STAGES.filter((s) => !s.module || mods.includes(s.module))
+    .filter((s) => !/search data/.test(s.label) || job.searchData)
+    .filter((s) => !/competitor (\d)/.test(s.label) || Number(s.label.slice(-1)) <= n);
 }
 
 function stageIndex(job: Job) {
@@ -721,6 +749,53 @@ function urlsLink(groups: IssueGroup[], checkId: string) {
   return n ? `<a href="#urls" class="urls-link" data-group="${esc(gs.sort((a, b) => b.urls.length - a.urls.length)[0].id)}">View ${n} affected URL${n === 1 ? '' : 's'} →</a>` : '';
 }
 
+// ---------------------------------------------------------------- Competitors
+
+function compareCard(r: AuditResult) {
+  const comps = r.competitors ?? [];
+  if (!comps.length) return '';
+  const mods = r.scorecards.map((s) => s.module);
+  const cell = (score?: number, best?: boolean) =>
+    score === undefined ? '<span class="subtle">–</span>' : `<div class="score-cell"><span class="score-num">${score}</span><div class="meter"><span class="${band(score)}" style="width:${score}%"></span></div>${best ? '<span class="lead-tag">Highest</span>' : ''}</div>`;
+  const rows = [
+    { name: r.clientName, host: hostOf(r.finalUrl), you: true, error: undefined as string | undefined, cards: r.scorecards.map((s) => ({ module: s.module, overall: s.overall, categories: s.categories.map((c) => ({ id: c.id, name: c.name, score: c.score })) })) },
+    ...comps.map((c) => ({ name: c.name, host: c.host.replace(/^www\./, ''), you: false, error: c.error, cards: c.scorecards })),
+  ];
+  const best = (m: string) => Math.max(...rows.map((x) => x.cards.find((c) => c.module === m)?.overall ?? -1));
+  const cats = r.scorecards.flatMap((s) => s.categories.map((c) => ({ module: s.module, id: c.id, name: c.name })));
+  const catBest = (id: string) => Math.max(...rows.map((x) => x.cards.flatMap((c) => c.categories).find((k) => k.id === id)?.score ?? -1));
+  return `<section class="card compare-card">
+    <div class="card-head"><h2>How ${esc(r.clientName)} compares</h2><span class="subtle small">Same audits and business type${mods.includes('seo') ? '; competitor SEO is based on a crawl of up to 50 pages' : ''}</span></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Site</th>${mods.map((m) => `<th>${m === 'ai' ? 'AI readiness' : 'SEO'}</th>`).join('')}</tr></thead>
+      <tbody>${rows
+        .map(
+          (x) => `<tr class="${x.you ? 'you' : ''}"><td><strong>${esc(x.name)}</strong>${x.you ? ' <span class="badge mod">Client</span>' : ''}<div class="subtle small">${esc(x.host)}</div></td>${
+            x.error
+              ? `<td colspan="${mods.length}" class="muted small">Could not be scored: ${esc(x.error.slice(0, 120))}</td>`
+              : mods.map((m) => { const v = x.cards.find((c) => c.module === m)?.overall; return `<td>${cell(v, v === best(m) && rows.length > 1)}</td>`; }).join('')
+          }</tr>`,
+        )
+        .join('')}</tbody>
+    </table></div>
+    <details class="cat-compare"><summary>Compare by category</summary>
+      <div class="table-scroll"><table class="compact">
+        <thead><tr><th>Category</th>${rows.map((x) => `<th class="num">${esc(x.name)}</th>`).join('')}</tr></thead>
+        <tbody>${cats
+          .map(
+            (c) => `<tr><td>${esc(c.name)}${mods.length > 1 ? ` <span class="subtle small">${c.module === 'ai' ? 'AI' : 'SEO'}</span>` : ''}</td>${rows
+              .map((x) => {
+                const v = x.cards.flatMap((k) => k.categories).find((k) => k.id === c.id)?.score;
+                return `<td class="num">${v === undefined ? '<span class="subtle">–</span>' : `<span class="${v === catBest(c.id) ? 'lead' : ''}">${v}</span>`}</td>`;
+              })
+              .join('')}</tr>`,
+          )
+          .join('')}</tbody>
+      </table></div>
+    </details>
+  </section>`;
+}
+
 // ---------------------------------------------------------------- Result
 
 const STATUS: Record<Status, [string, string]> = { pass: ['Good', 'pass'], warn: ['Improve', 'warn'], fail: ['Fix', 'fail'], info: ['Note', 'info'] };
@@ -746,6 +821,7 @@ function rerunFields(job: Job, opts: { businessType?: boolean } = {}) {
     job.crawlLimit ? `<input type="hidden" name="pages" value="${job.crawlLimit}">` : '',
     job.searchData ? '<input type="hidden" name="search" value="on">' : '',
     job.searchDb ? `<input type="hidden" name="db" value="${esc(job.searchDb)}">` : '',
+    ...(job.competitors ?? []).map((c) => `<input type="hidden" name="competitor" value="${esc(c)}">`),
   ].join('');
 }
 
@@ -927,6 +1003,8 @@ export function resultPage(job: Job, input: AuditResult, logo?: string, view: Vi
   </section>`;
     })
     .join('')}
+
+  ${compareCard(r)}
 
   <section class="card biz">
     <div>

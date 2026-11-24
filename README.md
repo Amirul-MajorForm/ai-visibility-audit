@@ -72,6 +72,8 @@ The crawler follows internal links from the homepage (no query-string URLs, resp
 
 **Views:** when both audits ran, the results page has a switch for *Both audits / AI visibility only / SEO only*. Each view shows only that audit's score, its own top priorities, checks and tabs, and the Client report and PDF buttons download that version (`report.pdf?view=seo` or `?view=ai`, built on first request and cached).
 
+**Competitors:** optionally add up to 2 competitor sites on the form (or `--compare a.com,b.com` on the command line). They are scored with the same audits and business type as the client, scores only: no report, no search data, and an SEO crawl of up to 50 pages each. The results page and report show a side-by-side comparison, overall and by category. A competitor that cannot be scored (down or blocking) is reported as such and does not stop the audit. Each competitor adds roughly 1 to 2 minutes.
+
 **Affected URLs:** a tab listing the URLs behind each issue (broken pages, duplicate titles and descriptions, missing or multiple H1s, thin and duplicate pages, redirects, noindex, canonical problems, deep or unlinked pages, and AI issues such as content hidden behind JavaScript). Each list can be filtered and downloaded as CSV, and every check links straight to its list ("View N affected URLs"). The PDF includes an appendix with up to 12 URLs per issue.
 
 **Combined priorities:** checks that are the same fix in both audits (titles, meta descriptions, H1s, sitemap, canonical, HTTPS, structured data, speed, alt text, language) appear once in the priority list, tagged "SEO + AI visibility".
