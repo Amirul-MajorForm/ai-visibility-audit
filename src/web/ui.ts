@@ -178,11 +178,44 @@ pre.log{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--mute
 
 code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
 
+/* Pages: AI view vs visitor view */
+.pg-head{display:grid;grid-template-columns:minmax(0,1.4fr) 260px minmax(0,1fr) 20px;gap:16px;padding:8px 20px;font-size:12px;font-weight:600;color:var(--muted);background:#fafbfc;border-bottom:1px solid var(--border)}
+.pg{border-bottom:1px solid var(--border)}
+.pg:last-child{border-bottom:0}
+.pg summary{list-style:none;display:grid;grid-template-columns:minmax(0,1.4fr) 260px minmax(0,1fr) 20px;gap:16px;align-items:center;padding:13px 20px;cursor:pointer}
+.pg summary::-webkit-details-marker{display:none}
+.pg summary:hover{background:#fafbfc}
+.pg .pg-name{display:flex;flex-direction:column;min-width:0}
+.pg .pg-name a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}
+.pg .pg-name a:hover{text-decoration:underline}
+.pg .pg-ratio{display:flex;align-items:center;gap:10px}
+.pg .chev{color:var(--subtle);transition:transform .15s}
+.pg[open] .chev{transform:rotate(90deg)}
+.pg-body{padding:0 20px 18px}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.side{border:1px solid var(--border);border-radius:10px;padding:14px;min-width:0;background:#fbfbfc}
+.side.vis{background:#f3faf6;border-color:#cfe9da}
+.side-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.side-head h4{font-size:13.5px}
+.side-note{font-size:12px;color:var(--subtle);margin:2px 0 10px}
+.excerpt{font-size:12.5px;line-height:1.6;color:var(--muted);max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.blocks{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+.blocks li{font-size:12.5px;background:#fff;border:1px solid #cfe9da;border-radius:6px;padding:3px 8px;max-width:100%;overflow-wrap:anywhere}
+.good-note{font-size:13px;color:var(--good-fg)}
+.alert.warn-alert{background:var(--warn-bg);color:#5c4500}
+mark{border-radius:4px;padding:0 4px;font-weight:600}
+mark.ai{background:#fde6e1;color:var(--bad-fg)}
+mark.vis{background:#dff3e8;color:var(--good-fg)}
+
+
 @media (max-width:960px){
   .overview{grid-template-columns:1fr}
   .cats{grid-template-columns:repeat(3,1fr)}
   .new-audit{grid-template-columns:1fr 1fr}
   .prio .body{grid-template-columns:1fr;padding-left:20px}
+  .compare{grid-template-columns:1fr}
+  .pg summary,.pg-head{grid-template-columns:minmax(0,1fr) 150px 20px}
+  .pg .pg-notes,.pg-head span:nth-child(3){display:none}
 }
 @media (max-width:640px){
   .nav{padding:0 16px;gap:12px} .nav .links,.logo .app{display:none}
@@ -468,18 +501,52 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
     )
     .join('');
 
+  const ratioOf = (p: (typeof r.pages)[number]) => (p.renderedWords >= 0 ? Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100)) : 101);
+  const worst = [...r.pages].filter((p) => p.compare && (ratioOf(p) < 70 || p.compare.conflicts.length)).sort((x, y) => ratioOf(x) - ratioOf(y))[0];
   const pageRows = r.pages
     .map((p) => {
       const ok = p.renderedWords >= 0;
-      const ratio = ok ? Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100)) : 0;
-      const notes = [p.widgets.length ? `Uses ${p.widgets.join(', ')}` : '', p.hiddenFacts.length ? `Hidden from AI: ${p.hiddenFacts.join(', ')}` : ''].filter(Boolean);
-      return `<tr>
-        <td><strong>${esc(p.label)}</strong><div class="small"><a class="subtle" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(new URL(p.url).pathname)}</a></div></td>
-        <td class="num">${p.rawWords}</td>
-        <td class="num">${ok ? p.renderedWords : '<span class="subtle">n/a</span>'}</td>
-        <td>${ok ? scoreCell(ratio).replace('<span class="score-num">' + ratio + '</span>', `<span class="score-num" style="width:40px">${ratio}%</span>`) : '<span class="subtle">n/a</span>'}</td>
-        <td class="muted small">${notes.length ? esc(notes.join('. ')) : '—'}</td>
-      </tr>`;
+      const ratio = ratioOf(p);
+      const cmp = p.compare;
+      const notes = [
+        cmp?.conflicts.length ? `${cmp.conflicts.map((c) => c.label).join(', ')} differ` : '',
+        p.widgets.length ? `Uses ${p.widgets.join(', ')}` : '',
+        p.hiddenFacts.length ? `Hidden from AI: ${p.hiddenFacts.join(', ')}` : '',
+      ].filter(Boolean);
+      const body = !cmp
+        ? `<p class="muted small" style="padding:4px 0 16px">${ok ? 'This page was behind a bot challenge when we visited, so the two versions could not be compared.' : 'This page could not be loaded in a browser, so the two versions could not be compared.'}</p>`
+        : `${cmp.incomplete ? `<div class="alert note">Some content did not load in our browser (${esc(cmp.incomplete.join(', '))}), so the visitor view below may be incomplete.</div>` : ''}${cmp.conflicts
+            .map(
+              (c) => `<div class="alert warn-alert"><strong>${esc(c.label)} differ.</strong> AI sees ${c.ai.map((v) => `<mark class="ai">${esc(v)}</mark>`).join(' ')}, but visitors see ${c.visitors.map((v) => `<mark class="vis">${esc(v)}</mark>`).join(' ')}.</div>`,
+            )
+            .join('')}
+          <div class="compare">
+            <div class="side">
+              <div class="side-head"><h4>What AI crawlers see</h4><span class="subtle small">${cmp.aiWords} words</span></div>
+              <p class="side-note">The text in the HTML your server sends. Most AI crawlers stop here.</p>
+              <div class="excerpt">${esc(cmp.aiExcerpt)}${cmp.aiExcerpt.length >= 900 ? '…' : ''}</div>
+            </div>
+            <div class="side vis">
+              <div class="side-head"><h4>Only visitors see</h4><span class="subtle small">${cmp.visitorOnlyWords} words in ${cmp.visitorOnlyCount} ${cmp.visitorOnlyCount === 1 ? 'block' : 'blocks'}</span></div>
+              <p class="side-note">Added by JavaScript after the page loads. Invisible to most AI crawlers.</p>
+              ${
+                cmp.visitorOnly.length
+                  ? `<ul class="blocks">${cmp.visitorOnly.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>${cmp.visitorOnlyCount > cmp.visitorOnly.length ? `<p class="subtle small" style="margin-top:6px">+ ${cmp.visitorOnlyCount - cmp.visitorOnly.length} more</p>` : ''}`
+                  : '<p class="good-note">Nothing significant. AI crawlers receive the same content visitors see.</p>'
+              }
+            </div>
+          </div>`;
+      let shownPath = new URL(p.url).pathname;
+      try { shownPath = decodeURI(shownPath); } catch {}
+      return `<details class="pg"${p === worst ? ' open' : ''}>
+        <summary>
+          <div class="pg-name"><strong>${esc(p.label)}</strong><a class="subtle small" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(shownPath)}</a></div>
+          <div class="pg-ratio">${ok ? scoreCell(ratio).replace('<span class="score-num">' + ratio + '</span>', `<span class="score-num" style="width:40px">${ratio}%</span>`) : '<span class="subtle">n/a</span>'}<span class="subtle small hide-sm">${p.rawWords} of ${ok ? p.renderedWords : '?'} words</span></div>
+          <div class="pg-notes muted small">${notes.length ? esc(notes.join('. ')) : ''}</div>
+          <span class="chev" aria-hidden="true">›</span>
+        </summary>
+        <div class="pg-body">${body}</div>
+      </details>`;
     })
     .join('');
 
@@ -582,11 +649,9 @@ export function resultPage(job: Job, r: AuditResult, logo?: string) {
   </section>
 
   <section class="panel card" data-panel="pages" hidden>
-    <div class="card-head"><p class="muted small">Each page was read as raw HTML (what most AI crawlers see) and in a full browser (what visitors see).</p></div>
-    <div class="table-scroll"><table>
-      <thead><tr><th>Page</th><th class="num">Words in HTML</th><th class="num">After JavaScript</th><th>AI can read</th><th>Notes</th></tr></thead>
-      <tbody>${pageRows}</tbody>
-    </table></div>
+    <div class="card-head"><p class="muted small">We read each page twice: as the raw HTML most AI crawlers receive, and in a full browser like a visitor. Open a page to compare the two.</p></div>
+    <div class="pg-head hide-sm"><span>Page</span><span>AI can read</span><span>Notes</span><span></span></div>
+    ${pageRows}
   </section>
 </main>
 <script>

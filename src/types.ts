@@ -1,3 +1,5 @@
+import type { Comparison } from './compare.js';
+
 export type Status = 'pass' | 'warn' | 'fail' | 'info';
 export type CategoryId = 'access' | 'rendering' | 'schema' | 'content' | 'discovery';
 export type Effort = 'Quick win' | 'Moderate' | 'Developer needed';
@@ -49,6 +51,8 @@ export interface PageResult {
   schemaTypes: string[];
   widgets: string[];
   hiddenFacts: string[];
+  /** AI view vs visitor view. Absent if the page could not be rendered or was stuck behind a challenge. */
+  compare?: Comparison;
 }
 
 export interface AuditResult {

@@ -4,6 +4,7 @@ import type { Facts } from '../page.js';
 import { mk, pct, path, list } from './util.js';
 import { widgetKind, WIDGET_KIND_LABEL } from '../widgets.js';
 import { askedLike } from '../examples.js';
+import { comparePage } from '../compare.js';
 
 export const FACT_LABELS: Record<keyof Facts, string> = {
   price: 'prices', hours: 'opening hours or times', phone: 'phone number', postal: 'address', email: 'email address',
@@ -61,6 +62,20 @@ export function renderingChecks(ctx: Ctx): Check[] {
       : undefined,
     effort: invisible.length ? (onlyEmail ? 'Quick win' : 'Moderate') : undefined,
     evidence: hidden.map((h) => `${path(h.p.url)}: ${FACT_LABELS[h.k]} only after JavaScript`) }));
+
+  // Details that differ between what AI receives and what visitors see (e.g. a stale price in the HTML).
+  const conflicts = ctx.pages
+    .filter((p) => !p.challenged)
+    .flatMap((p) => (comparePage(p.raw, p.rendered, p.failedData)?.conflicts ?? []).map((c) => ({ p, c })));
+  if (conflicts.length) {
+    const first = conflicts[0];
+    checks.push(mk({ id: 'conflicting-facts', category: 'rendering', title: 'AI and visitors see different details', weight: 2, score: 0.3,
+      finding: `On ${list([...new Set(conflicts.map((x) => path(x.p.url)))])}, the HTML that AI crawlers receive shows ${first.c.label.toLowerCase()} that visitors never see. For example, AI reads ${list(first.c.ai.map((v) => `"${v}"`))}, while visitors see ${list(first.c.visitors.slice(0, 3).map((v) => `"${v}"`))}.`,
+      why: 'AI assistants repeat what is in the HTML. If that copy is out of date, they will quote customers the wrong details with confidence.',
+      fix: 'Check which value is current, and make sure the page your server sends contains the same details visitors see after the page finishes loading.',
+      effort: 'Developer needed',
+      evidence: conflicts.slice(0, 6).map((x) => `${path(x.p.url)}: ${x.c.label}: AI sees ${x.c.ai.join(', ')}; visitors see ${x.c.visitors.slice(0, 4).join(', ')}`) }));
+  }
 
   const widgets = [...new Set(ctx.pages.flatMap((p) => p.widgets))];
   if (widgets.length) {

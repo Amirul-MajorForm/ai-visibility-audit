@@ -21,6 +21,8 @@ export interface AnalyzedPage {
   renderError?: string;
   /** Raw fetch kept returning a bot challenge / loading page, so raw content is unknown. */
   challenged?: boolean;
+  /** Data requests that failed while rendering; the visitor view may be incomplete. */
+  failedData?: string[];
 }
 
 export interface Ctx {
@@ -192,6 +194,7 @@ export async function crawl(inputUrl: string, log: (s: string) => void, opts: Cr
       widgets: detectWidgets([...homeRendered.requests, ...homeRaw.resourceUrls]),
       renderError: homeRendered.error,
       challenged: homeChallenged,
+      failedData: homeRendered.failedData,
     });
 
     const forced = opts.businessType && opts.businessType !== 'auto' ? profileById(opts.businessType) : undefined;
@@ -218,10 +221,12 @@ export async function crawl(inputUrl: string, log: (s: string) => void, opts: Cr
       if (pages.some((p) => norm(p.url) === norm(f.finalUrl))) continue;
       const r = await render(f.finalUrl);
       if (r.error) log(`Warning: browser could not render ${f.finalUrl} (${r.error})`);
+      if (r.failedData.length) log(`Note: some content requests failed on ${f.finalUrl} (${r.failedData.join(', ')})`);
       const renderedInfo = r.html ? parsePage(r.html, f.finalUrl) : undefined;
       const raw = challenged && renderedInfo ? renderedInfo : parsePage(f.body, f.finalUrl);
       pages.push({
         challenged,
+        failedData: r.failedData,
         url: f.finalUrl,
         label: kp.label,
         kind: kp.kind,

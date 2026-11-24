@@ -68,6 +68,10 @@ Fitness and wellness · Restaurant, cafe or bar · Beauty, salon or spa · Clini
 
 The type decides which key pages are expected (e.g. menu and reservations for a restaurant, shipping and returns for an online store), whether address and opening hours matter, which schema.org types and fields are recommended, how much public pricing matters, and the examples used in the advice. Definitions live in `src/profiles.ts`. The results page shows what was detected, and you can re-run an audit as a different type.
 
+### What AI sees vs what visitors see
+
+Every reviewed page is read twice: as the raw HTML most AI crawlers receive, and in a full browser. The Pages tab shows the two side by side for each page: the text AI gets, and the text blocks (product names, prices, descriptions) that only appear after JavaScript runs. The client report includes the same comparison for the two pages with the biggest gap. If a detail such as a price differs between the two versions, it is flagged as "AI and visitors see different details". When some of the page's data fails to load in our browser, the comparison says the visitor view may be incomplete and no conflict is reported.
+
 Pages that sometimes return a bot challenge or "loading" screen instead of content are retried, judged on their real content, and reported as their own finding.
 
 Formats are tuned for Singapore (phone numbers, postal codes, S$ prices).

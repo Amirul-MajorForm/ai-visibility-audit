@@ -144,6 +144,31 @@ export async function renderReport(r: AuditResult): Promise<string> {
     .map((s) => `<div class="stat"><div class="stat-val">${esc(s.value)}</div><div class="stat-label">${esc(s.label)}</div><div class="stat-note">${esc(s.note)}</div></div>`)
     .join('');
 
+  // Side-by-side "what AI sees" for the pages where the gap matters most (max 2, to keep the PDF short).
+  const ratioOf = (p: (typeof r.pages)[number]) => (p.renderedWords >= 0 ? Math.min(100, Math.round((p.rawWords / Math.max(1, p.renderedWords)) * 100)) : 101);
+  const showcase = r.pages
+    .filter((p) => p.compare && (ratioOf(p) < 70 || p.compare.conflicts.length) && (p.compare.visitorOnly.length || p.compare.conflicts.length))
+    .sort((a, b) => ratioOf(a) - ratioOf(b))
+    .slice(0, 2);
+  const compareBoxes = showcase
+    .map((p) => {
+      const c = p.compare!;
+      const excerpt = c.aiExcerpt.length > 420 ? c.aiExcerpt.slice(0, 420).replace(/\s+\S*$/, '') + '…' : c.aiExcerpt;
+      return `<div class="cmp">
+        <div class="cmp-title"><strong>${esc(p.label)}</strong> <span class="muted small">${esc(pathOf(p.url))} · AI can read ${ratioOf(p)}%</span></div>
+        ${c.conflicts.map((x) => `<div class="cmp-conflict"><strong>${esc(x.label)} differ:</strong> AI sees ${x.ai.map((v) => `<b class="ai">${esc(v)}</b>`).join(' ')}, visitors see ${x.visitors.slice(0, 4).map((v) => `<b class="vis">${esc(v)}</b>`).join(' ')}</div>`).join('')}
+        <div class="cmp-grid">
+          <div class="cmp-side"><h4>What AI crawlers see <span>${c.aiWords} words</span></h4><p>${esc(excerpt)}</p></div>
+          <div class="cmp-side vis"><h4>Only visitors see <span>${c.visitorOnlyWords} words</span></h4>
+            ${c.visitorOnly.length ? `<ul>${c.visitorOnly.slice(0, 14).map((t) => `<li>${esc(t.length > 70 ? t.slice(0, 67) + '...' : t)}</li>`).join('')}</ul>${c.visitorOnlyCount > 14 ? `<p class="more">+ ${c.visitorOnlyCount - 14} more</p>` : ''}` : '<p>Nothing significant.</p>'}
+          </div>
+        </div>
+      </div>`;
+    })
+    // Close the intro wrapper after the first box, so the heading never sits alone at the bottom of a page.
+    .map((box, i) => (i === 0 ? box + '</div>' : box))
+    .join('');
+
   const pagesTable = `<table class="pages">
     <thead><tr><th>Page</th><th class="num">Words in HTML</th><th class="num">After JavaScript</th><th class="num">AI can read</th><th>Notes</th></tr></thead>
     <tbody>${r.pages
@@ -297,6 +322,25 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
 .url{word-break:break-all}
 .ratio{font-family:var(--h);font-weight:600;border-bottom:3px solid var(--c);padding-bottom:1px}
 
+/* AI vs visitor comparison */
+.cmp-intro{break-inside:avoid}
+.cmp-h{font-size:18px;margin:22px 0 4px}
+.cmp-lede{font-size:13px;color:var(--muted);margin-bottom:12px}
+.cmp{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:12px;break-inside:avoid}
+.cmp-title{margin-bottom:8px}
+.cmp-conflict{background:var(--yellow);border-radius:8px;padding:7px 10px;font-size:12.5px;margin-bottom:8px}
+.cmp-conflict b{border-radius:4px;padding:0 4px}
+.cmp-conflict b.ai{background:#fcd5cc;color:#8a2412}
+.cmp-conflict b.vis{background:#d3efdd;color:#0d4a2c}
+.cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cmp-side{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);background:#fafafc}
+.cmp-side.vis{background:#eef8f2;border-color:#cfe9da}
+.cmp-side h4{font-size:12.5px;color:var(--ink);margin-bottom:6px;display:flex;justify-content:space-between}
+.cmp-side h4 span{font-family:var(--b);font-weight:500;color:var(--muted);font-size:11px}
+.cmp-side ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+.cmp-side li{background:#fff;border:1px solid #cfe9da;border-radius:5px;padding:1px 6px;color:var(--ink)}
+.cmp-side .more{margin-top:5px;font-size:11px}
+
 /* About */
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .box{background:var(--card);border-radius:14px;padding:16px 18px}
@@ -322,7 +366,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   .sheet + .sheet{margin-top:0;border-top:8px solid #e7e8ee}
   .cover{min-height:100vh}
   .cover h1{font-size:38px}
-  .glance,.two,.next{grid-template-columns:1fr}
+  .glance,.two,.next,.cmp-grid{grid-template-columns:1fr}
   .stats,.legend{grid-template-columns:1fr 1fr}
   dl{grid-template-columns:1fr}
   table{display:block;overflow-x:auto}
@@ -414,6 +458,7 @@ dd.fix{background:#e3f4e9;border-left:3px solid var(--teal);padding:7px 10px;bor
   <div class="sec-head"><h2>Pages reviewed</h2><span class="sec-num">05 · Coverage</span></div>
   <p class="lede">We read each page twice: once as raw HTML (what most AI crawlers see) and once in a full browser (what a visitor sees). The gap between the two is content AI may miss.</p>
   ${pagesTable}
+  ${compareBoxes ? `<div class="cmp-intro"><h3 class="cmp-h">What AI sees vs what visitors see</h3><p class="cmp-lede">The pages with the biggest gap. On the left is the text in the HTML your server sends, which is all most AI crawlers read. On the right is text that only appears after JavaScript runs.</p>${compareBoxes}` : ''}
 
   <div class="sec-head" style="margin-top:28px"><h2>About this audit</h2><span class="sec-num">06 · Method</span></div>
   <div class="two">

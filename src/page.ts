@@ -19,6 +19,8 @@ export interface PageInfo {
   h2: string[];
   questionHeadings: string[];
   text: string;
+  /** Visible text split into small blocks (headings, paragraphs, product names, prices...), in page order. */
+  blocks: string[];
   words: number;
   images: number;
   imagesWithAlt: number;
@@ -116,6 +118,19 @@ export function parsePage(html: string, url: string): PageInfo {
   const allHeadings = headings('h1, h2, h3, h4, summary, dt, [class*="accordion"] button, [class*="faq"] button');
 
   $('script, style, noscript, template, svg, iframe').remove();
+  // Each element's own text (not its children's), so a product card yields "Fresh Chicken", "S$12.90"...
+  const blocks: string[] = [];
+  const seen = new Set<string>();
+  $('body *').each((_, el) => {
+    if (blocks.length >= 800) return false;
+    const own = clean($(el).contents().filter((__, n) => n.type === 'text').map((__, n) => $(n).text()).get().join(' '));
+    if (own.length < 2 || seen.has(own)) return;
+    seen.add(own);
+    blocks.push(own);
+  });
+  // Separate adjacent elements so "Login" + "Register" doesn't become "LoginRegister".
+  $('br').replaceWith(' ');
+  $('body *').after(' ');
   const text = clean($('body').text() || $.root().text());
 
   return {
@@ -129,6 +144,7 @@ export function parsePage(html: string, url: string): PageInfo {
     h2: headings('h2'),
     questionHeadings: allHeadings.filter((h) => h.endsWith('?') && h.length < 200),
     text,
+    blocks,
     words: wordCount(text),
     images: images.length,
     imagesWithAlt,

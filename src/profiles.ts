@@ -7,7 +7,7 @@ export type PageKind =
 
 export const PAGE_KINDS: Record<PageKind, { label: string; re: RegExp }> = {
   pricing: { label: 'Pricing', re: /pric|rates|packages?\b|plans?\b|fees?\b|membership|passes|cost/i },
-  menu: { label: 'Menu', re: /\bmenus?\b|food|drinks|dishes/i },
+  menu: { label: 'Menu', re: /\bmenus?\b|\bdrinks\b|\bdishes\b/i },
   services: { label: 'Services', re: /service|class|program|treatment|course|solution|what-?we-?do|practice-?areas|offering|therap|procedure/i },
   products: { label: 'Products', re: /shop|products?\b|collections?\b|store\b|catalog|all-?items/i },
   booking: { label: 'Booking', re: /book|reserv|appointment|schedul|timetable|calendar|enquir/i },

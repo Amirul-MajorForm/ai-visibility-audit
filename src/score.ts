@@ -8,6 +8,7 @@ import { discoveryChecks } from './checks/discovery.js';
 import { list } from './checks/util.js';
 import { typesOf } from './page.js';
 import { brandFromTitle, buildExamples } from './examples.js';
+import { comparePage } from './compare.js';
 
 export const CATEGORY_META: Record<CategoryId, { name: string; blurb: string; weight: number }> = {
   access: { name: 'AI Crawler Access', blurb: 'Can ChatGPT, Claude, Gemini and Perplexity get into the site at all?', weight: 30 },
@@ -119,6 +120,7 @@ export function buildResult(ctx: Ctx, clientOverride?: string): AuditResult {
       schemaTypes: p.raw.schemaTypes,
       widgets: p.widgets,
       hiddenFacts: hiddenFacts(p).map((k) => FACT_LABELS[k]),
+      compare: p.challenged ? undefined : comparePage(p.raw, p.rendered, p.failedData),
     })),
     priorities,
     stats: [
